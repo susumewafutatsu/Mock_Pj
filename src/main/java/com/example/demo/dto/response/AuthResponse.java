@@ -1,7 +1,14 @@
+
 package com.example.demo.dto.response;
 
-// TODO: Fields: accessToken (String), refreshToken (String), tokenType ("Bearer"),
-//               userId (Long), email (String), fullName (String), role (Role)
-public class AuthResponse {
+import lombok.Builder;
+import lombok.Data;
 
+@Data
+@Builder
+public class AuthResponse {
+    private String accessToken;
+    private String refreshToken;
+    private String tokenType = "Bearer";
+    private UserResponse user;
 }

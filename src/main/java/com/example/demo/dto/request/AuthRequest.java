@@ -7,9 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
-public class RegisterRequest {
-    @NotBlank(message = "Họ tên không được để trống")
-    private String fullName;
+public class AuthRequest {
     
     @NotBlank(message = "Email không được để trống")
     @Email(message = "Email không hợp lệ")
@@ -19,5 +17,5 @@ public class RegisterRequest {
     @Size(min = 6, message = "Mật khẩu phải có ít nhất 6 ký tự")
     private String password;
     
-    private String role = "STUDENT"; // Mặc định
+    private String fullName;
 }
