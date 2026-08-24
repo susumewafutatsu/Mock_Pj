@@ -43,6 +43,16 @@ public class JwtUtils {
     }
 
     /**
+     * Tạo access token trực tiếp từ email + role (dùng cho luồng OAuth2 Google,
+     * nơi principal là OAuth2User chứ không phải UserDetails)
+     */
+    public String generateToken(String email, String role) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        return createToken(claims, email);
+    }
+
+    /**
      * Tạo refresh token
      */
     public String generateRefreshToken(String username) {
