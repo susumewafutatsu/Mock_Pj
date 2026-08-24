@@ -22,14 +22,15 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        // Nếu user chưa có password (đăng nhập bằng Google), không cho login local
-        if (user.getPasswordHash() == null || user.getPasswordHash().isEmpty()) {
-            throw new UsernameNotFoundException("Please login with " + user.getAuthProvider());
-        }
+        // User đăng nhập bằng Google không có password_hash. Không thể throw ở đây vì
+        // JwtAuthenticationFilter cũng dùng service này để validate token của họ.
+        // Thay vào đó trả về password rỗng — BCrypt sẽ không khớp với bất kỳ mật khẩu nào,
+        // nên /api/auth/login (local) vẫn bị từ chối.
+        String password = user.getPasswordHash() == null ? "" : user.getPasswordHash();
 
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
-                user.getPasswordHash(),
+                password,
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
         );
     }
