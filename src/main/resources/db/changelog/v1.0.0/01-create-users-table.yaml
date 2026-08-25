@@ -1,0 +1,53 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-01-create-users
+      author: team
+      comment: "Tạo bảng Users lưu thông tin tài khoản (giáo viên, học sinh, admin)"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: Users
+      changes:
+        - createTable:
+            tableName: Users
+            columns:
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: full_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: password_hash
+                  type: VARCHAR(255)
+              - column:
+                  name: role
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: auth_provider
+                  type: VARCHAR(20)
+                  defaultValue: LOCAL
+              - column:
+                  name: external_id
+                  type: VARCHAR(100)
+              - column:
+                  name: avatar_url
+                  type: VARCHAR(255)
+              - column:
+                  name: created_at
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP

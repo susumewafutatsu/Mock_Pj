@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-02-create-subjects
+      author: team
+      comment: "Tạo bảng Subjects (môn học)"
+      changes:
+        - createTable:
+            tableName: Subjects
+            columns:
+              - column:
+                  name: SubjectID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: SubjectName
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: Description
+                  type: VARCHAR(255)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.0.0-02-create-subjectlevels
+      author: team
+      comment: "Tạo bảng SubjectLevels (trình độ của môn học, VD: N4, A1, Lớp 9)"
+      changes:
+        - createTable:
+            tableName: SubjectLevels
+            columns:
+              - column:
+                  name: LevelID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: SubjectID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_subjectlevel_subject
+                    references: Subjects(SubjectID)
+              - column:
+                  name: LevelName
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Description
+                  type: VARCHAR(255)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP

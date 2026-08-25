@@ -1,0 +1,92 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-05-create-exams
+      author: team
+      comment: "Tạo bảng Exams (đề thi)"
+      changes:
+        - createTable:
+            tableName: Exams
+            columns:
+              - column:
+                  name: ExamID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ClassID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_exam_class
+                    references: Classes(ClassID)
+              - column:
+                  name: LevelID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_exam_level
+                    references: SubjectLevels(LevelID)
+              - column:
+                  name: CreatedBy
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_exam_creator
+                    references: Users(UserID)
+              - column:
+                  name: Title
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: DurationMinutes
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: StartTime
+                  type: DATETIME
+              - column:
+                  name: EndTime
+                  type: DATETIME
+              - column:
+                  name: DriveBackupURL
+                  type: VARCHAR(255)
+              - column:
+                  name: IsAdaptive
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.0.0-05-create-examquestions
+      author: team
+      comment: "Tạo bảng ExamQuestions (quan hệ nhiều-nhiều: đề thi - câu hỏi)"
+      changes:
+        - createTable:
+            tableName: ExamQuestions
+            columns:
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_examq_exam
+                    references: Exams(ExamID)
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_examq_question
+                    references: Questions(QuestionID)
+              - column:
+                  name: QuestionOrder
+                  type: INT
+        - addPrimaryKey:
+            tableName: ExamQuestions
+            columnNames: ExamID, QuestionID
+            constraintName: pk_examquestions

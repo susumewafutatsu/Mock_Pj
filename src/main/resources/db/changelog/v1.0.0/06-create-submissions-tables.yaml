@@ -1,0 +1,95 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-06-create-examsubmissions
+      author: team
+      comment: "Tạo bảng ExamSubmissions (bài nộp của học sinh)"
+      changes:
+        - createTable:
+            tableName: ExamSubmissions
+            columns:
+              - column:
+                  name: SubmissionID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_submission_exam
+                    references: Exams(ExamID)
+              - column:
+                  name: StudentID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_submission_student
+                    references: Users(UserID)
+              - column:
+                  name: StartedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: SubmittedAt
+                  type: DATETIME
+              - column:
+                  name: TotalScore
+                  type: DECIMAL(5,2)
+                  defaultValueNumeric: 0.00
+              - column:
+                  name: Status
+                  type: VARCHAR(20)
+                  defaultValue: IN_PROGRESS
+              - column:
+                  name: AtRiskStatus
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: SyncToGoogleClassroom
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+
+  - changeSet:
+      id: v1.0.0-06-create-submissiondetails
+      author: team
+      comment: "Tạo bảng SubmissionDetails (chi tiết từng câu trả lời trong bài nộp)"
+      changes:
+        - createTable:
+            tableName: SubmissionDetails
+            columns:
+              - column:
+                  name: DetailID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: SubmissionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_detail_submission
+                    references: ExamSubmissions(SubmissionID)
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_detail_question
+                    references: Questions(QuestionID)
+              - column:
+                  name: ChosenAnswerID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_detail_answer
+                    references: Answers(AnswerID)
+              - column:
+                  name: IsCorrect
+                  type: BOOLEAN
+              - column:
+                  name: AnsweredAt
+                  type: DATETIME

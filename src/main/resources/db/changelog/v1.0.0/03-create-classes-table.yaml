@@ -1,0 +1,77 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-03-create-classes
+      author: team
+      comment: "Tạo bảng Classes (lớp học, liên kết với giáo viên và trình độ môn học)"
+      changes:
+        - createTable:
+            tableName: Classes
+            columns:
+              - column:
+                  name: ClassID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ClassName
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: CourseCode
+                  type: VARCHAR(20)
+                  constraints:
+                    unique: true
+              - column:
+                  name: TeacherID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_class_teacher
+                    references: Users(UserID)
+              - column:
+                  name: LevelID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_class_level
+                    references: SubjectLevels(LevelID)
+              - column:
+                  name: GoogleClassroomID
+                  type: VARCHAR(100)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.0.0-03-create-classstudents
+      author: team
+      comment: "Tạo bảng ClassStudents (quan hệ nhiều-nhiều giữa lớp và học sinh)"
+      changes:
+        - createTable:
+            tableName: ClassStudents
+            columns:
+              - column:
+                  name: ClassID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_classstudent_class
+                    references: Classes(ClassID)
+              - column:
+                  name: StudentID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_classstudent_student
+                    references: Users(UserID)
+              - column:
+                  name: EnrolledAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+        - addPrimaryKey:
+            tableName: ClassStudents
+            columnNames: ClassID, StudentID
+            constraintName: pk_classstudents
