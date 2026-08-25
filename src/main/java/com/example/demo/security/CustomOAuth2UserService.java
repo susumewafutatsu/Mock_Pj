@@ -14,6 +14,10 @@ import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserServ
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Cookie;
 
 import java.util.Collections;
 import java.util.Map;
@@ -47,7 +51,25 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
         User user = userRepository.findByEmail(email)
                 .map(existing -> linkGoogleAccount(existing, fullName, avatarUrl, externalId))
-                .orElseGet(() -> createGoogleUser(email, fullName, avatarUrl, externalId));
+                .orElseGet(() -> {
+                    // Mặc định là STUDENT, lấy từ cookie nếu có
+                    Role defaultRole = Role.STUDENT;
+                    ServletRequestAttributes attributesRequest = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                    if (attributesRequest != null) {
+                        HttpServletRequest request = attributesRequest.getRequest();
+                        defaultRole = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ROLE_PARAM_COOKIE_NAME)
+                                .map(Cookie::getValue)
+                                .map(val -> {
+                                    try {
+                                        return Role.valueOf(val.toUpperCase());
+                                    } catch (IllegalArgumentException e) {
+                                        return Role.STUDENT;
+                                    }
+                                })
+                                .orElse(Role.STUDENT);
+                    }
+                    return createGoogleUser(email, fullName, avatarUrl, externalId, defaultRole);
+                });
         user = userRepository.save(user);
 
         // Authority dùng đúng format "ROLE_x" như CustomUserDetailsService để phân quyền nhất quán
@@ -77,15 +99,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         return user;
     }
 
-    /** Lần đầu đăng nhập bằng Google: tạo user mới với role mặc định STUDENT, không có password. */
-    private User createGoogleUser(String email, String fullName, String avatarUrl, String externalId) {
+    /** Lần đầu đăng nhập bằng Google: tạo user mới với role lấy từ cookie hoặc mặc định STUDENT. */
+    private User createGoogleUser(String email, String fullName, String avatarUrl, String externalId, Role role) {
         return User.builder()
                 .email(email)
                 .fullName(fullName)
                 .avatarUrl(avatarUrl)
                 .externalId(externalId)
                 .authProvider(AuthProvider.GOOGLE)
-                .role(Role.STUDENT)
+                .role(role)
                 .build();
     }
 }
