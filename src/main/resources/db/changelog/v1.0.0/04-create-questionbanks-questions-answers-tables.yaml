@@ -1,0 +1,115 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-04-create-questionbanks
+      author: team
+      comment: "Tạo bảng QuestionBanks (ngân hàng câu hỏi theo môn/trình độ)"
+      changes:
+        - createTable:
+            tableName: QuestionBanks
+            columns:
+              - column:
+                  name: BankID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: BankName
+                  type: VARCHAR(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: LevelID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_questionbank_level
+                    references: SubjectLevels(LevelID)
+              - column:
+                  name: CreatedBy
+                  type: VARCHAR(50)
+                  constraints:
+                    foreignKeyName: fk_questionbank_teacher
+                    references: Users(UserID)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.0.0-04-create-questions
+      author: team
+      comment: "Tạo bảng Questions (câu hỏi trong ngân hàng)"
+      changes:
+        - createTable:
+            tableName: Questions
+            columns:
+              - column:
+                  name: QuestionID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: BankID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_question_bank
+                    references: QuestionBanks(BankID)
+              - column:
+                  name: Content
+                  type: LONGTEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: QuestionType
+                  type: VARCHAR(20)
+                  defaultValue: MULTIPLE_CHOICE
+              - column:
+                  name: DifficultyLevel
+                  type: INT
+              - column:
+                  name: IsAIGenerated
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: Explanation
+                  type: LONGTEXT
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.0.0-04-create-answers
+      author: team
+      comment: "Tạo bảng Answers (các đáp án của câu hỏi)"
+      changes:
+        - createTable:
+            tableName: Answers
+            columns:
+              - column:
+                  name: AnswerID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_answer_question
+                    references: Questions(QuestionID)
+              - column:
+                  name: Content
+                  type: VARCHAR(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: IsCorrect
+                  type: BOOLEAN
+                  defaultValueBoolean: false

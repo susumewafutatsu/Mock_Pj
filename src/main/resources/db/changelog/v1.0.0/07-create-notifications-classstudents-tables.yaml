@@ -1,0 +1,44 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.0.0-07-create-notifications
+      author: team
+      comment: "Tạo bảng Notifications (nhật ký thông báo Email/Zalo/SNS)"
+      changes:
+        - createTable:
+            tableName: Notifications
+            columns:
+              - column:
+                  name: NotificationID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    foreignKeyName: fk_notification_user
+                    references: Users(UserID)
+              - column:
+                  name: Channel
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Subject
+                  type: VARCHAR(255)
+              - column:
+                  name: Body
+                  type: LONGTEXT
+              - column:
+                  name: Status
+                  type: VARCHAR(20)
+                  defaultValue: PENDING
+              - column:
+                  name: SentAt
+                  type: DATETIME
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP

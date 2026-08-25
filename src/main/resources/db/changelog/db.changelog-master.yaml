@@ -1,0 +1,29 @@
+databaseChangeLog:
+  # ── v1.0.0: Khởi tạo toàn bộ schema ban đầu ──────────────────
+  - include:
+      file: db/changelog/v1.0.0/01-create-users-table.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/02-create-subjects-subjectlevels-tables.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/03-create-classes-table.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/04-create-questionbanks-questions-answers-tables.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/05-create-exams-examquestions-tables.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/06-create-submissions-tables.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.0/07-create-notifications-classstudents-tables.yaml
+      relativeToChangelogFile: false
