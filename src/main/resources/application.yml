@@ -12,8 +12,7 @@ spring:
 
   jpa:
     hibernate:
-      # 'validate' - Hibernate chỉ kiểm tra schema, không tự sửa.
-      # Liquibase sẽ là người duy nhất quản lý schema.
+      # Hibernate chỉ kiểm tra schema. Liquibase quản lý schema.
       ddl-auto: validate
     show-sql: true
     properties:
