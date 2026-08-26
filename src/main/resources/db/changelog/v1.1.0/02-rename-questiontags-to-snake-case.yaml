@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.1.0-02-rename-questiontags
+      author: team
+      comment: >
+        Đổi tên QuestionTags -> question_tags cho khớp naming strategy mặc định
+        của Spring Boot (CamelCaseToUnderscoresNamingStrategy), giống các bảng
+        question_banks / exam_questions / class_students đang có trong schema.
+      preConditions:
+        # Bỏ qua (đánh dấu đã chạy) nếu DB mới đã có sẵn tên đúng
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: QuestionTags
+      changes:
+        - renameTable:
+            oldTableName: QuestionTags
+            newTableName: question_tags

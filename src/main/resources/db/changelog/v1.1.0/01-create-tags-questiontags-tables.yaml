@@ -1,0 +1,63 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1.1.0-01-create-tags
+      author: team
+      comment: "Tạo bảng Tags (nhãn phân loại câu hỏi, dùng cho lọc/tìm kiếm)"
+      changes:
+        - createTable:
+            tableName: Tags
+            columns:
+              - column:
+                  name: TagID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: TagName
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: UC_Tag_TagName
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+  - changeSet:
+      id: v1.1.0-01-create-questiontags
+      author: team
+      comment: "Tạo bảng nối QuestionTags (nhiều-nhiều giữa Questions và Tags)"
+      changes:
+        - createTable:
+            tableName: QuestionTags
+            columns:
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_questiontag_question
+                    references: Questions(QuestionID)
+                    deleteCascade: true
+              - column:
+                  name: TagID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_questiontag_tag
+                    references: Tags(TagID)
+                    deleteCascade: true
+        - addPrimaryKey:
+            tableName: QuestionTags
+            columnNames: QuestionID, TagID
+            constraintName: PK_QuestionTags
+        # Index chiều ngược: phục vụ truy vấn "lấy câu hỏi theo tag"
+        - createIndex:
+            tableName: QuestionTags
+            indexName: idx_questiontag_tag
+            columns:
+              - column:
+                  name: TagID

@@ -27,3 +27,16 @@ databaseChangeLog:
   - include:
       file: db/changelog/v1.0.0/07-create-notifications-classstudents-tables.yaml
       relativeToChangelogFile: false
+
+  # ── v1.1.0: Tag cho câu hỏi (phục vụ lọc/tìm kiếm) ───────────
+  - include:
+      file: db/changelog/v1.1.0/01-create-tags-questiontags-tables.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.1.0/02-rename-questiontags-to-snake-case.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.1.0/03-rename-tags-columns-to-snake-case.yaml
+      relativeToChangelogFile: false
