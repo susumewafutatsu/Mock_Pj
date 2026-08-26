@@ -1,0 +1,121 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # Đồng bộ schema v1.0.0 với các entity hiện có.
+  # Lý do: application.yml đặt ddl-auto=validate, nên mọi cột mà entity
+  # khai báo nhưng DB không có sẽ làm Hibernate fail lúc khởi động.
+  # Quy ước: tên trong entity là chuẩn, DB được đổi theo.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.0.1-01-align-questionbanks
+      author: team
+      comment: "QuestionBanks: BankName->Title, CreatedBy->TeacherID, thêm SourceDocumentURL"
+      changes:
+        - renameColumn:
+            tableName: QuestionBanks
+            oldColumnName: BankName
+            newColumnName: Title
+            columnDataType: VARCHAR(150)
+        - modifyDataType:
+            tableName: QuestionBanks
+            columnName: Title
+            newDataType: VARCHAR(200)
+        # modifyDataType của MySQL sinh ra "MODIFY", làm mất NOT NULL cũ.
+        # QuestionBank.title khai báo nullable=false nên khôi phục lại ràng buộc.
+        - addNotNullConstraint:
+            tableName: QuestionBanks
+            columnName: Title
+            columnDataType: VARCHAR(200)
+            defaultNullValue: "Ngân hàng chưa đặt tên"
+        - renameColumn:
+            tableName: QuestionBanks
+            oldColumnName: CreatedBy
+            newColumnName: TeacherID
+            columnDataType: VARCHAR(50)
+        - addColumn:
+            tableName: QuestionBanks
+            columns:
+              - column:
+                  name: SourceDocumentURL
+                  type: VARCHAR(255)
+
+  - changeSet:
+      id: v1.0.1-01-align-answers
+      author: team
+      comment: "Answers: Content -> AnswerContent (khớp Answer.answerContent)"
+      changes:
+        - renameColumn:
+            tableName: Answers
+            oldColumnName: Content
+            newColumnName: AnswerContent
+            columnDataType: VARCHAR(500)
+        # Answer.answerContent khai báo @Lob -> Hibernate mong đợi LONGTEXT
+        - modifyDataType:
+            tableName: Answers
+            columnName: AnswerContent
+            newDataType: LONGTEXT
+        # Giữ lại NOT NULL bị MODIFY làm mất (Answer.answerContent nullable=false)
+        - addNotNullConstraint:
+            tableName: Answers
+            columnName: AnswerContent
+            columnDataType: LONGTEXT
+            defaultNullValue: "(chưa có nội dung)"
+
+  - changeSet:
+      id: v1.0.1-01-align-subjectlevels
+      author: team
+      comment: "SubjectLevels: thêm DisplayOrder mà entity SubjectLevel đang khai báo"
+      changes:
+        - addColumn:
+            tableName: SubjectLevels
+            columns:
+              - column:
+                  name: DisplayOrder
+                  type: INT
+                  defaultValueNumeric: 1
+
+  - changeSet:
+      id: v1.0.1-01-align-notifications
+      author: team
+      comment: "Notifications: Body -> Message (khớp Notification.message)"
+      changes:
+        - renameColumn:
+            tableName: Notifications
+            oldColumnName: Body
+            newColumnName: Message
+            columnDataType: LONGTEXT
+
+  - changeSet:
+      id: v1.0.1-01-align-classstudents
+      author: team
+      comment: "ClassStudents: EnrolledAt -> JoinedAt (khớp ClassStudent.joinedAt)"
+      changes:
+        - renameColumn:
+            tableName: ClassStudents
+            oldColumnName: EnrolledAt
+            newColumnName: JoinedAt
+            columnDataType: DATETIME
+
+  - changeSet:
+      id: v1.0.1-01-align-submissiondetails
+      author: team
+      comment: "SubmissionDetails: ChosenAnswerID -> SelectedAnswerID, thêm các cột entity đang khai báo"
+      changes:
+        - renameColumn:
+            tableName: SubmissionDetails
+            oldColumnName: ChosenAnswerID
+            newColumnName: SelectedAnswerID
+            columnDataType: INT
+        - addColumn:
+            tableName: SubmissionDetails
+            columns:
+              - column:
+                  name: EssayResponse
+                  type: LONGTEXT
+              - column:
+                  name: ScoreEarned
+                  type: DECIMAL(4,2)
+                  defaultValueNumeric: 0.00
+              - column:
+                  name: AIFeedback
+                  type: LONGTEXT

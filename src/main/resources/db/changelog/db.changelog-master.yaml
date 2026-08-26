@@ -27,3 +27,16 @@ databaseChangeLog:
   - include:
       file: db/changelog/v1.0.0/07-create-notifications-classstudents-tables.yaml
       relativeToChangelogFile: false
+
+  # ── v1.0.1: Đồng bộ schema với entity + snapshot câu hỏi theo đề thi ──
+  - include:
+      file: db/changelog/v1.0.1/01-align-schema-with-entities.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.1/02-add-exam-question-snapshot.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.0.1/03-questionbanks-teacher-not-null.yaml
+      relativeToChangelogFile: false

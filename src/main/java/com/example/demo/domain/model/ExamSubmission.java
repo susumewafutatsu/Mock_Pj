@@ -4,6 +4,8 @@ import com.example.demo.domain.enums.SubmissionStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -41,7 +43,9 @@ public class ExamSubmission {
     @Builder.Default
     private BigDecimal totalScore = new BigDecimal("0.00");
 
+    // VARCHAR thay vì ENUM riêng của MySQL (xem chú thích trong ExamQuestion)
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "Status", length = 20)
     @Builder.Default
     private SubmissionStatus status = SubmissionStatus.IN_PROGRESS;

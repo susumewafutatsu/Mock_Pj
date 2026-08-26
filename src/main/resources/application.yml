@@ -14,6 +14,13 @@ spring:
     hibernate:
       # Hibernate chỉ kiểm tra schema. Liquibase quản lý schema.
       ddl-auto: validate
+      naming:
+        # Mặc định của Spring Boot là CamelCaseToUnderscoresNamingStrategy:
+        # nó tự đổi @Table("QuestionBanks") thành bảng question_banks, còn
+        # Liquibase lại tạo đúng chữ QuestionBanks -> hai bên trỏ vào hai bảng
+        # khác nhau và validate luôn fail trên DB mới.
+        # Dùng chiến lược chuẩn để tên trong entity được lấy y nguyên.
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     show-sql: true
     properties:
       hibernate:

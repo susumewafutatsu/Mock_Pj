@@ -34,3 +34,7 @@ build/
 
 ### Secrets ###
 .env
+
+### Local artefacts (log chạy thử, bản sao lưu dữ liệu) ###
+*.log
+backup-*.sql
