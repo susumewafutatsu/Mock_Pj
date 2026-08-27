@@ -40,3 +40,14 @@ databaseChangeLog:
   - include:
       file: db/changelog/v1.0.1/03-questionbanks-teacher-not-null.yaml
       relativeToChangelogFile: false
+
+  # ── v1.0.2: Gia cố phiên làm bài (chống trùng phiên, tự nộp khi hết giờ, chống mất tiến độ) ──
+  - include:
+      file: db/changelog/v1.0.2/01-exam-session-hardening.yaml
+      relativeToChangelogFile: false
+
+  # ── v1.0.3: Dữ liệu mẫu để test. Chỉ nạp khi bật context "demo"
+  #    (spring.liquibase.contexts=demo). Không bật thì file này bị bỏ qua. ──
+  - include:
+      file: db/changelog/v1.0.3/01-seed-demo-data.yaml
+      relativeToChangelogFile: false

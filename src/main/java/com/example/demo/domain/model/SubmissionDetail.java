@@ -8,7 +8,12 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "SubmissionDetails")
+@Table(
+        name = "SubmissionDetails",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_detail_submission_question",
+                columnNames = {"SubmissionID", "QuestionID"})
+)
 @Getter
 @Setter
 @NoArgsConstructor

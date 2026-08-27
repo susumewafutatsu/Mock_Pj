@@ -1,0 +1,249 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # DỮ LIỆU MẪU ĐỂ TEST — KHÔNG CHẠY MẶC ĐỊNH.
+  #
+  # Mọi changeSet ở đây đều mang context "demo", nên chỉ nạp khi bật:
+  #   spring.liquibase.contexts=demo
+  # hoặc chạy app với: --spring.liquibase.contexts=demo
+  # Không bật thì Liquibase bỏ qua toàn bộ file này.
+  #
+  # ID được đặt trong dải 9001+ để không đụng dữ liệu tự tăng có sẵn
+  # trên DB dev của bạn. Email dùng đuôi @demo.local cho dễ nhận.
+  #
+  # Mật khẩu của mọi tài khoản mẫu: demo1234
+  # (hash BCrypt bên dưới đã kiểm tra khớp với BCryptPasswordEncoder
+  #  mà SecurityConfig đang dùng.)
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.0.3-01-seed-users
+      author: team
+      context: demo
+      comment: "Tài khoản mẫu: 1 giáo viên + 3 học sinh. Mật khẩu: demo1234"
+      changes:
+        - insert:
+            tableName: Users
+            columns:
+              - column: { name: UserID, value: "demo-teacher-01" }
+              - column: { name: full_name, value: "Cô Lan (demo)" }
+              - column: { name: email, value: "teacher@demo.local" }
+              - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
+              - column: { name: role, value: "TEACHER" }
+              - column: { name: auth_provider, value: "LOCAL" }
+        - insert:
+            tableName: Users
+            columns:
+              - column: { name: UserID, value: "demo-student-01" }
+              - column: { name: full_name, value: "Nguyễn Văn An (demo)" }
+              - column: { name: email, value: "student1@demo.local" }
+              - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
+              - column: { name: role, value: "STUDENT" }
+              - column: { name: auth_provider, value: "LOCAL" }
+        - insert:
+            tableName: Users
+            columns:
+              - column: { name: UserID, value: "demo-student-02" }
+              - column: { name: full_name, value: "Trần Thị Bình (demo)" }
+              - column: { name: email, value: "student2@demo.local" }
+              - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
+              - column: { name: role, value: "STUDENT" }
+              - column: { name: auth_provider, value: "LOCAL" }
+        # Học sinh 03 KHÔNG thuộc lớp nào — dùng để kiểm tra luật hiển thị:
+        # em này chỉ thấy đề tự luyện (ClassID null), không thấy đề của lớp.
+        - insert:
+            tableName: Users
+            columns:
+              - column: { name: UserID, value: "demo-student-03" }
+              - column: { name: full_name, value: "Lê Văn Cường (demo, chưa vào lớp)" }
+              - column: { name: email, value: "student3@demo.local" }
+              - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
+              - column: { name: role, value: "STUDENT" }
+              - column: { name: auth_provider, value: "LOCAL" }
+  - changeSet:
+      id: v1.0.3-01-seed-subjects-levels
+      author: team
+      context: demo
+      comment: "Môn học + trình độ. Đây là thứ giáo viên chọn khi tạo đề thi."
+      changes:
+        - insert:
+            tableName: Subjects
+            columns:
+              - column: { name: SubjectID, valueNumeric: 9001 }
+              - column: { name: SubjectName, value: "Tiếng Nhật (demo)" }
+              - column: { name: Description, value: "Môn học mẫu để test" }
+        - insert:
+            tableName: Subjects
+            columns:
+              - column: { name: SubjectID, valueNumeric: 9002 }
+              - column: { name: SubjectName, value: "Toán học (demo)" }
+              - column: { name: Description, value: "Môn học mẫu để test" }
+        - insert:
+            tableName: SubjectLevels
+            columns:
+              - column: { name: LevelID, valueNumeric: 9001 }
+              - column: { name: SubjectID, valueNumeric: 9001 }
+              - column: { name: LevelName, value: "N4" }
+              - column: { name: DisplayOrder, valueNumeric: 1 }
+        - insert:
+            tableName: SubjectLevels
+            columns:
+              - column: { name: LevelID, valueNumeric: 9002 }
+              - column: { name: SubjectID, valueNumeric: 9002 }
+              - column: { name: LevelName, value: "Đại số 9" }
+              - column: { name: DisplayOrder, valueNumeric: 2 }
+
+  - changeSet:
+      id: v1.0.3-01-seed-class
+      author: team
+      context: demo
+      comment: "Một lớp của giáo viên demo, có 2 học sinh. Đề gán vào lớp này chỉ 2 em đó thấy."
+      changes:
+        - insert:
+            tableName: Classes
+            columns:
+              - column: { name: ClassID, valueNumeric: 9001 }
+              - column: { name: ClassName, value: "Lớp N4 buổi tối (demo)" }
+              - column: { name: CourseCode, value: "DEMO-N4" }
+              - column: { name: TeacherID, value: "demo-teacher-01" }
+              - column: { name: LevelID, valueNumeric: 9001 }
+        - insert:
+            tableName: ClassStudents
+            columns:
+              - column: { name: ClassID, valueNumeric: 9001 }
+              - column: { name: StudentID, value: "demo-student-01" }
+        - insert:
+            tableName: ClassStudents
+            columns:
+              - column: { name: ClassID, valueNumeric: 9001 }
+              - column: { name: StudentID, value: "demo-student-02" }
+  - changeSet:
+      id: v1.0.3-01-seed-question-bank
+      author: team
+      context: demo
+      comment: "Ngân hàng câu hỏi + 9 câu trắc nghiệm và 1 câu tự luận. Đây là nguồn để chọn câu khi tạo đề."
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO QuestionBanks (BankID, Title, LevelID, TeacherID)
+              VALUES (9001, 'Ngân hàng N4 – Ngữ pháp cơ bản (demo)', 9001, 'demo-teacher-01');
+
+              INSERT INTO Questions (QuestionID, BankID, Content, QuestionType, DifficultyLevel, Explanation, IsDeleted) VALUES
+                (9001, 9001, N'「毎日 日本語を＿＿＿。」Chọn dạng đúng của động từ.', 'MULTIPLE_CHOICE', 1, N'Thói quen hằng ngày dùng thể lịch sự hiện tại.', false),
+                (9002, 9001, N'「わたし＿＿＿ 学生です。」Chọn trợ từ đúng.', 'MULTIPLE_CHOICE', 1, N'「は」đánh dấu chủ đề của câu.', false),
+                (9003, 9001, N'「きのう 映画を＿＿＿。」Chọn thể quá khứ.', 'MULTIPLE_CHOICE', 1, N'「きのう」là mốc quá khứ nên động từ chia thể ました.', false),
+                (9004, 9001, N'「この 本は おもしろい＿＿＿ です。」Chọn từ điền vào.', 'MULTIPLE_CHOICE', 2, N'Mẫu 〜そうです diễn tả suy đoán qua vẻ ngoài.', false),
+                (9005, 9001, N'「あした 雨が ふる＿＿＿ おもいます。」Chọn từ nối.', 'MULTIPLE_CHOICE', 2, N'「と思います」dùng để nêu ý kiến.', false),
+                (9006, 9001, N'「たばこを ＿＿＿は いけません。」Chọn dạng đúng.', 'MULTIPLE_CHOICE', 2, N'Mẫu 〜てはいけません = cấm làm gì.', false),
+                (9007, 9001, N'「日本へ 行った＿＿＿ が ありますか。」Chọn từ điền vào.', 'MULTIPLE_CHOICE', 3, N'Mẫu 〜たことがあります = từng làm gì.', false),
+                (9008, 9001, N'「先生に ほめ＿＿＿。」Chọn thể bị động.', 'MULTIPLE_CHOICE', 3, N'Thể bị động của ほめる là ほめられる.', false),
+                (9009, 9001, N'「お金が あれば、車を ＿＿＿。」Chọn dạng đúng.', 'MULTIPLE_CHOICE', 3, N'Mẫu điều kiện 〜ば đi với ý muốn / khả năng.', false),
+                (9010, 9001, N'Viết một đoạn 3–5 câu giới thiệu về bản thân bằng tiếng Nhật (tên, tuổi, nghề nghiệp, sở thích).', 'ESSAY', 2, N'Câu tự luận: cần giáo viên chấm tay.', false);
+  - changeSet:
+      id: v1.0.3-01-seed-answers
+      author: team
+      context: demo
+      comment: "Đáp án cho 9 câu trắc nghiệm. Câu 9010 là tự luận nên không có đáp án."
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Answers (QuestionID, AnswerContent, IsCorrect) VALUES
+                (9001, N'勉強します', true),
+                (9001, N'勉強しました', false),
+                (9001, N'勉強しません', false),
+                (9001, N'勉強してください', false),
+                (9002, N'は', true),
+                (9002, N'を', false),
+                (9002, N'に', false),
+                (9002, N'で', false),
+                (9003, N'見ました', true),
+                (9003, N'見ます', false),
+                (9003, N'見ています', false),
+                (9003, N'見たい', false),
+                (9004, N'そう', true),
+                (9004, N'よう', false),
+                (9004, N'らしく', false),
+                (9004, N'みたい', false),
+                (9005, N'と', true),
+                (9005, N'を', false),
+                (9005, N'が', false),
+                (9005, N'の', false),
+                (9006, N'すって', true),
+                (9006, N'すう', false),
+                (9006, N'すった', false),
+                (9006, N'すおう', false),
+                (9007, N'こと', true),
+                (9007, N'もの', false),
+                (9007, N'ところ', false),
+                (9007, N'とき', false),
+                (9008, N'られました', true),
+                (9008, N'させました', false),
+                (9008, N'ました', false),
+                (9008, N'たいです', false),
+                (9009, N'買いたいです', true),
+                (9009, N'買いました', false),
+                (9009, N'買っています', false),
+                (9009, N'買ってください', false);
+  - changeSet:
+      id: v1.0.3-01-seed-exams
+      author: team
+      context: demo
+      comment: >-
+        Năm đề thi phủ đủ năm trạng thái mà ExamResponse.Availability sinh ra:
+        OPEN, OPEN (tự luyện, không gán lớp), UPCOMING, CLOSED, NO_QUESTIONS.
+        Thời gian tính tương đối theo NOW() nên nạp lúc nào cũng đúng trạng thái.
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Exams (ExamID, ClassID, LevelID, CreatedBy, Title, DurationMinutes, StartTime, EndTime, IsAdaptive) VALUES
+                (9001, 9001, 9001, 'demo-teacher-01', N'Đề mẫu N4 – đang mở (demo)', 20,
+                 DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 7 DAY), false),
+                (9002, NULL, 9001, 'demo-teacher-01', N'Đề tự luyện N4 – không gán lớp (demo)', 15,
+                 DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 30 DAY), true),
+                (9003, 9001, 9001, 'demo-teacher-01', N'Đề sắp diễn ra (demo)', 30,
+                 DATE_ADD(NOW(), INTERVAL 2 DAY), DATE_ADD(NOW(), INTERVAL 9 DAY), false),
+                (9004, 9001, 9001, 'demo-teacher-01', N'Đề đã hết hạn (demo)', 30,
+                 DATE_SUB(NOW(), INTERVAL 10 DAY), DATE_SUB(NOW(), INTERVAL 1 DAY), false),
+                (9005, 9001, 9001, 'demo-teacher-01', N'Đề chưa gắn câu hỏi (demo)', 25,
+                 DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 7 DAY), false);
+
+  - changeSet:
+      id: v1.0.3-01-seed-exam-questions
+      author: team
+      context: demo
+      comment: >-
+        Gắn câu hỏi vào đề, KÈM snapshot nội dung — đúng như ExamSnapshotService
+        làm khi giáo viên bấm thêm câu hỏi. Thiếu snapshot thì phòng thi phải
+        fallback về Questions sống, nên seed luôn để test đúng đường chính.
+        Đề 9005 cố tình để trống để test trạng thái NO_QUESTIONS.
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO ExamQuestions (ExamID, QuestionID, QuestionOrder, Points,
+                                         QuestionContent, QuestionType, DifficultyLevel, Explanation, SnapshotAt)
+              SELECT e.ExamID, q.QuestionID,
+                     ROW_NUMBER() OVER (PARTITION BY e.ExamID ORDER BY q.QuestionID),
+                     CASE WHEN q.QuestionType = 'ESSAY' THEN 2.00 ELSE 1.00 END,
+                     q.Content, q.QuestionType, q.DifficultyLevel, q.Explanation, NOW()
+              FROM Questions q
+              CROSS JOIN (SELECT 9001 AS ExamID UNION ALL SELECT 9002
+                          UNION ALL SELECT 9003 UNION ALL SELECT 9004) e
+              WHERE (e.ExamID = 9001 AND q.QuestionID IN (9001, 9002, 9003, 9004, 9005, 9010))
+                 OR (e.ExamID = 9002 AND q.QuestionID IN (9006, 9007, 9008, 9009))
+                 OR (e.ExamID = 9003 AND q.QuestionID IN (9001, 9006, 9007))
+                 OR (e.ExamID = 9004 AND q.QuestionID IN (9002, 9008, 9009));
+
+              INSERT INTO ExamQuestionAnswers (ExamID, QuestionID, OriginalAnswerID, AnswerContent, IsCorrect, AnswerOrder)
+              SELECT eq.ExamID, a.QuestionID, a.AnswerID, a.AnswerContent, a.IsCorrect,
+                     ROW_NUMBER() OVER (PARTITION BY eq.ExamID, a.QuestionID ORDER BY a.AnswerID)
+              FROM ExamQuestions eq
+              JOIN Answers a ON a.QuestionID = eq.QuestionID
+              WHERE eq.ExamID BETWEEN 9001 AND 9005;
+
