@@ -4,10 +4,14 @@ import com.example.demo.domain.model.Answer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-// TODO: Add custom query methods:
-// - findByQuestionId(Long questionId)
-// - findByQuestionIdAndIsCorrect(Long questionId, boolean isCorrect)
-@Repository
-public interface AnswerRepository extends JpaRepository<Answer, Long> {
+import java.util.List;
 
+@Repository
+public interface AnswerRepository extends JpaRepository<Answer, Integer> {
+
+    List<Answer> findByQuestion_QuestionId(Integer questionId);
+
+    List<Answer> findByQuestion_QuestionIdAndIsCorrectTrue(Integer questionId);
+
+    void deleteByQuestion_QuestionId(Integer questionId);
 }

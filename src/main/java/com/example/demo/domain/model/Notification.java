@@ -2,6 +2,8 @@ package com.example.demo.domain.model;
 import com.example.demo.domain.enums.NotificationChannel;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -23,14 +25,17 @@ public class Notification {
     @JoinColumn(name = "UserID", nullable = false)
     private User user;
 
+    // VARCHAR thay vì ENUM riêng của MySQL (xem chú thích trong ExamQuestion)
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "Channel", length = 20)
     private NotificationChannel channel;
 
     @Column(name = "Subject", length = 200)
     private String subject;
 
-    @Lob
+    // LONGVARCHAR khớp LONGTEXT của changelog (xem chú thích trong Answer)
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "Message", nullable = false)
     private String message;
 

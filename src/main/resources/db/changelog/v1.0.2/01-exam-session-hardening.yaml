@@ -1,0 +1,108 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # Gia cố phiên làm bài của học sinh. Ba vấn đề, ba cột/ràng buộc:
+  #
+  #   1. Trùng phiên thi & làm lại nhiều lần
+  #      -> UNIQUE(ExamID, StudentID) trên ExamSubmissions.
+  #         Double-click, mở nhiều tab, gọi lại /start đều không thể
+  #         sinh ra phiên thứ hai. Đây là chốt cuối ở tầng DB, không
+  #         phụ thuộc vào việc tầng service kiểm tra đúng hay không.
+  #
+  #   2. Hết giờ không tự nộp
+  #      -> ExpiresAt: deadline do server chốt ngay lúc bắt đầu thi.
+  #         Client chỉ đọc để đếm ngược; mọi quyết định "còn giờ hay
+  #         không" đều so với cột này. Đổi đồng hồ máy không có tác dụng.
+  #      -> index (Status, ExpiresAt) cho job quét tự động nộp bài.
+  #
+  #   3. Mất mạng / mất tiến độ bài làm
+  #      -> LastActiveAt: heartbeat 15-30s từ client, dùng để phát hiện
+  #         học sinh rớt mạng (AtRiskStatus). KHÔNG dùng để cộng bù giờ.
+  #      -> UNIQUE(SubmissionID, QuestionID) trên SubmissionDetails để
+  #         autosave từng câu theo kiểu upsert.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.0.2-01-examsubmissions-session-columns
+      author: team
+      comment: "ExamSubmissions: ExpiresAt (deadline chốt phía server), LastActiveAt (heartbeat), AutoSubmitted"
+      changes:
+        - addColumn:
+            tableName: ExamSubmissions
+            columns:
+              - column:
+                  name: ExpiresAt
+                  type: DATETIME
+              - column:
+                  name: LastActiveAt
+                  type: DATETIME
+              - column:
+                  name: AutoSubmitted
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+
+  - changeSet:
+      id: v1.0.2-01-examsubmissions-backfill-expiresat
+      author: team
+      comment: "Điền ExpiresAt cho các phiên tạo trước migration này, để job tự nộp bài không bỏ sót"
+      changes:
+        - sql:
+            splitStatements: false
+            sql: >-
+              UPDATE ExamSubmissions s
+              JOIN Exams e ON e.ExamID = s.ExamID
+              SET s.ExpiresAt = LEAST(
+                      DATE_ADD(s.StartedAt, INTERVAL e.DurationMinutes MINUTE),
+                      COALESCE(e.EndTime, DATE_ADD(s.StartedAt, INTERVAL e.DurationMinutes MINUTE)))
+              WHERE s.ExpiresAt IS NULL
+                AND s.StartedAt IS NOT NULL
+                AND e.DurationMinutes IS NOT NULL
+
+  - changeSet:
+      id: v1.0.2-01-examsubmissions-unique-attempt
+      author: team
+      comment: >-
+        Một học sinh chỉ có đúng một phiên thi cho mỗi đề.
+        CẢNH BÁO: nếu DB hiện tại đã có nhiều dòng cùng (ExamID, StudentID) thì
+        changeSet này sẽ fail. Phải tự quyết định giữ phiên nào (thường là phiên
+        có SubmittedAt, hoặc StartedAt sớm nhất) rồi xoá phần còn lại trước khi
+        chạy lại migration — không tự động xoá vì đó là dữ liệu bài làm thật.
+      changes:
+        - addUniqueConstraint:
+            tableName: ExamSubmissions
+            columnNames: ExamID, StudentID
+            constraintName: uq_submission_exam_student
+
+  - changeSet:
+      id: v1.0.2-01-examsubmissions-scan-indexes
+      author: team
+      comment: "Index cho job quét: hết giờ (ExpiresAt) và mất kết nối (LastActiveAt)"
+      changes:
+        - createIndex:
+            tableName: ExamSubmissions
+            indexName: idx_submission_status_expires
+            columns:
+              - column:
+                  name: Status
+              - column:
+                  name: ExpiresAt
+        - createIndex:
+            tableName: ExamSubmissions
+            indexName: idx_submission_status_lastactive
+            columns:
+              - column:
+                  name: Status
+              - column:
+                  name: LastActiveAt
+
+  - changeSet:
+      id: v1.0.2-01-submissiondetails-unique-question
+      author: team
+      comment: >-
+        Autosave ghi theo kiểu upsert (SubmissionID + QuestionID), nên mỗi câu
+        hỏi chỉ được phép có một dòng trong một bài làm.
+        CẢNH BÁO tương tự changeSet unique ở trên nếu DB đã có dòng trùng.
+      changes:
+        - addUniqueConstraint:
+            tableName: SubmissionDetails
+            columnNames: SubmissionID, QuestionID
+            constraintName: uq_detail_submission_question

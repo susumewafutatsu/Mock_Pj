@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -33,11 +35,14 @@ public class User {
     @Column(name = "password_hash", length = 255)  // ← ĐỔI THÀNH password_hash
     private String passwordHash;
 
+    // VARCHAR thay vì ENUM riêng của MySQL (xem chú thích trong ExamQuestion)
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "role", nullable = false)  // ← ĐỔI THÀNH role
     private Role role;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "auth_provider", length = 20)  // ← ĐỔI THÀNH auth_provider
     @Builder.Default
     private AuthProvider authProvider = AuthProvider.LOCAL;

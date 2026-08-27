@@ -1,6 +1,8 @@
 package com.example.demo.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "Answers")
@@ -20,7 +22,10 @@ public class Answer {
     @JoinColumn(name = "QuestionID", nullable = false)
     private Question question;
 
-    @Lob
+    // @Lob của Hibernate 6 map String thành CLOB dài 255 (tinytext trong MySQL),
+    // trong khi changelog tạo LONGTEXT -> validate báo lệch kiểu.
+    // LONGVARCHAR là kiểu ứng với LONGTEXT nên hai bên khớp nhau.
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "AnswerContent", nullable = false)
     private String answerContent;
 

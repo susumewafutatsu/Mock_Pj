@@ -1,5 +1,11 @@
 server:
   port: 8080
+  error:
+    # Cần cho các lỗi có ý nghĩa với người dùng, đặc biệt là 409 lúc thi:
+    # "Đã hết giờ làm bài lúc ... Bài của bạn đã được nộp tự động." Mặc định
+    # Spring bỏ trắng field message nên client chỉ nhận được chữ "Conflict".
+    # GlobalExceptionHandler (đang là stub) làm xong thì bỏ dòng này đi được.
+    include-message: always
 
 spring:
   config:
@@ -14,6 +20,13 @@ spring:
     hibernate:
       # Hibernate chỉ kiểm tra schema. Liquibase quản lý schema.
       ddl-auto: validate
+      naming:
+        # Mặc định của Spring Boot là CamelCaseToUnderscoresNamingStrategy:
+        # nó tự đổi @Table("QuestionBanks") thành bảng question_banks, còn
+        # Liquibase lại tạo đúng chữ QuestionBanks -> hai bên trỏ vào hai bảng
+        # khác nhau và validate luôn fail trên DB mới.
+        # Dùng chiến lược chuẩn để tên trong entity được lấy y nguyên.
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     show-sql: true
     properties:
       hibernate:
@@ -22,6 +35,10 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     enabled: true
+    # Bỏ comment dòng dưới (hoặc chạy app với --spring.liquibase.contexts=demo)
+    # để nạp dữ liệu mẫu ở db/changelog/v1.0.3/01-seed-demo-data.yaml.
+    # Không bật context này thì toàn bộ seed bị bỏ qua — schema vẫn tạo bình thường.
+    # contexts: demo
 
   data:
     redis:
@@ -50,6 +67,18 @@ jwt:
   secret: your-256-bit-secret-key-change-this-in-production-use-64-characters-for-better-security
   expiration-ms: 86400000        
   refresh-expiration-ms: 604800000  
+
+# ── Phiên làm bài của học sinh ─────────────────────────────────
+exam:
+  session:
+    # Chu kỳ job quét các phiên đã quá ExpiresAt để nộp hộ. Chỉ là lưới an toàn
+    # cho học sinh đã offline — người còn online được nộp ngay ở request kế tiếp.
+    auto-submit-interval-ms: 30000
+    # Chu kỳ job đánh dấu AtRiskStatus.
+    at-risk-scan-interval-ms: 30000
+    # Im lặng quá bao lâu thì coi là mất kết nối. Đặt gấp 2-3 lần chu kỳ
+    # heartbeat của client (client gọi mỗi 15-30 giây).
+    at-risk-after-seconds: 90
 
 # ── Swagger UI ─────────────────────────────────────────────────
 springdoc:

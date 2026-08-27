@@ -1,0 +1,160 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # Snapshot câu hỏi theo đề thi.
+  #
+  # Vấn đề: Questions/Answers là dữ liệu "sống" trong ngân hàng câu hỏi.
+  # Nếu giáo viên sửa nội dung hoặc đổi đáp án đúng sau khi học sinh đã
+  # làm bài, SubmissionDetails.IsCorrect và TotalScore đã lưu sẽ không
+  # còn giải thích được bằng dữ liệu hiện tại.
+  #
+  # Cách xử lý: khi câu hỏi được đưa vào đề thi, sao chép nội dung +
+  # toàn bộ đáp án sang bản đóng băng thuộc về đề thi đó. Đề thi đọc
+  # snapshot, ngân hàng câu hỏi tự do sửa.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.0.1-02-examquestions-snapshot-columns
+      author: team
+      comment: "ExamQuestions: thêm Points và các cột snapshot nội dung câu hỏi"
+      changes:
+        - addColumn:
+            tableName: ExamQuestions
+            columns:
+              # Entity ExamQuestion đã khai báo Points nhưng v1.0.0 chưa tạo cột
+              - column:
+                  name: Points
+                  type: DECIMAL(4,2)
+                  defaultValueNumeric: 1.00
+              # Nullable: các dòng ExamQuestions tạo trước migration này chưa
+              # có snapshot, code sẽ fallback về Question đang sống.
+              - column:
+                  name: QuestionContent
+                  type: LONGTEXT
+              - column:
+                  name: QuestionType
+                  type: VARCHAR(20)
+              - column:
+                  name: DifficultyLevel
+                  type: INT
+              - column:
+                  name: Explanation
+                  type: LONGTEXT
+              - column:
+                  name: SnapshotAt
+                  type: DATETIME
+
+  - changeSet:
+      id: v1.0.1-02-create-examquestionanswers
+      author: team
+      comment: "Tạo bảng ExamQuestionAnswers: bản đóng băng đáp án của câu hỏi trong một đề thi"
+      changes:
+        - createTable:
+            tableName: ExamQuestionAnswers
+            columns:
+              - column:
+                  name: SnapshotAnswerID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+              # Truy vết về đáp án gốc. SET NULL khi đáp án gốc bị xoá —
+              # snapshot vẫn nguyên vẹn, chỉ mất liên kết tham chiếu.
+              - column:
+                  name: OriginalAnswerID
+                  type: INT
+              - column:
+                  name: AnswerContent
+                  type: LONGTEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: IsCorrect
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: AnswerOrder
+                  type: INT
+        - addForeignKeyConstraint:
+            constraintName: fk_eqa_examquestion
+            baseTableName: ExamQuestionAnswers
+            baseColumnNames: ExamID, QuestionID
+            referencedTableName: ExamQuestions
+            referencedColumnNames: ExamID, QuestionID
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            constraintName: fk_eqa_original_answer
+            baseTableName: ExamQuestionAnswers
+            baseColumnNames: OriginalAnswerID
+            referencedTableName: Answers
+            referencedColumnNames: AnswerID
+            onDelete: SET NULL
+        - createIndex:
+            indexName: idx_eqa_exam_question
+            tableName: ExamQuestionAnswers
+            columns:
+              - column:
+                  name: ExamID
+              - column:
+                  name: QuestionID
+
+  - changeSet:
+      id: v1.0.1-02-submissiondetails-point-to-snapshot
+      author: team
+      comment: "SubmissionDetails: lưu đáp án học sinh chọn theo snapshot, không theo Answers sống"
+      changes:
+        - addColumn:
+            tableName: SubmissionDetails
+            columns:
+              - column:
+                  name: SelectedSnapshotAnswerID
+                  type: INT
+        - addForeignKeyConstraint:
+            constraintName: fk_detail_snapshot_answer
+            baseTableName: SubmissionDetails
+            baseColumnNames: SelectedSnapshotAnswerID
+            referencedTableName: ExamQuestionAnswers
+            referencedColumnNames: SnapshotAnswerID
+        # SelectedAnswerID giờ chỉ để truy vết. Giáo viên phải được xoá đáp án
+        # trong ngân hàng câu hỏi mà không bị FK của bài đã nộp chặn lại —
+        # nội dung thật của bài nộp đã nằm trong snapshot.
+        - dropForeignKeyConstraint:
+            baseTableName: SubmissionDetails
+            constraintName: fk_detail_answer
+        - addForeignKeyConstraint:
+            constraintName: fk_detail_answer
+            baseTableName: SubmissionDetails
+            baseColumnNames: SelectedAnswerID
+            referencedTableName: Answers
+            referencedColumnNames: AnswerID
+            onDelete: SET NULL
+
+  - changeSet:
+      id: v1.0.1-02-questions-soft-delete
+      author: team
+      comment: "Questions: xoá mềm + mốc sửa đổi. Câu hỏi đã dùng trong đề không được xoá cứng."
+      changes:
+        - addColumn:
+            tableName: Questions
+            columns:
+              - column:
+                  name: IsDeleted
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: UpdatedAt
+                  type: DATETIME
