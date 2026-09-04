@@ -1,0 +1,35 @@
+databaseChangeLog:
+  # Hibernate (naming strategy mặc định của Spring Boot) suy ra tên cột từ
+  # @Column: "TagName" -> tag_name, "CreatedAt" -> created_at. Các bảng cũ trong
+  # schema đã theo quy ước này (question_banks.created_at, users.full_name...),
+  # nên đổi bảng Tags cho khớp.
+  - changeSet:
+      id: v1.1.0-03-rename-tags-columns
+      author: team
+      comment: "Đổi tên cột bảng tags sang snake_case cho khớp naming strategy"
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: tags
+            columnName: TagName
+      changes:
+        - renameColumn:
+            tableName: tags
+            oldColumnName: TagName
+            newColumnName: tag_name
+            columnDataType: VARCHAR(50)
+        - renameColumn:
+            tableName: tags
+            oldColumnName: CreatedAt
+            newColumnName: created_at
+            columnDataType: DATETIME
+        # MySQL CHANGE COLUMN làm mất NOT NULL / DEFAULT nên khai báo lại
+        - addNotNullConstraint:
+            tableName: tags
+            columnName: tag_name
+            columnDataType: VARCHAR(50)
+        - addDefaultValue:
+            tableName: tags
+            columnName: created_at
+            columnDataType: DATETIME
+            defaultValueComputed: CURRENT_TIMESTAMP
