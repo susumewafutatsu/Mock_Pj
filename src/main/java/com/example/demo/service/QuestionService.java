@@ -22,19 +22,9 @@ public interface QuestionService {
 
     QuestionResponse create(QuestionCreateRequest request, String teacherEmail);
 
-    /**
-     * Sửa câu hỏi. Không chặn dù câu hỏi đã nằm trong đề thi đã phát hành:
-     * các đề đó đọc snapshot của riêng chúng
-     * ({@link com.example.demo.domain.model.ExamQuestion}), nên bài đã nộp và
-     * điểm đã chấm không bị ảnh hưởng.
-     */
     QuestionResponse update(Integer bankId, Integer questionId,
                             QuestionUpdateRequest request, String teacherEmail);
 
-    /**
-     * Xoá câu hỏi khỏi ngân hàng. Nếu câu hỏi đã được dùng trong đề thi thì
-     * chỉ xoá mềm để giữ lịch sử và liên kết thống kê.
-     */
     void delete(Integer bankId, Integer questionId, String teacherEmail);
 
     Page<QuestionResponse> listByBank(Integer bankId, String teacherEmail, Pageable pageable);

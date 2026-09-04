@@ -1,0 +1,64 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # SỬA LỆCH QUY ƯỚC ĐẶT TÊN CỦA BẢNG TAGS.
+  #
+  # Nhánh feature/question-search ban đầu có hai changeSet đổi tên
+  # QuestionTags -> question_tags và TagName/CreatedAt -> tag_name/created_at,
+  # vì cho rằng dự án dùng naming strategy mặc định của Spring Boot
+  # (CamelCaseToUnderscoresNamingStrategy).
+  #
+  # Thực tế application.yml ép PhysicalNamingStrategyStandardImpl: tên trong
+  # entity được lấy y nguyên. Toàn bộ schema hiện có cũng theo PascalCase
+  # (QuestionBanks, ExamQuestions, ClassStudents, Questions.CreatedAt...),
+  # không có bảng nào dùng gạch dưới. Hai changeSet kia làm Hibernate
+  # ddl-auto=validate báo "missing table [QuestionTags]" và app không khởi
+  # động được.
+  #
+  # Hai changeSet dưới đây đổi ngược về PascalCase. Máy nào chưa từng chạy
+  # bản đổi tên cũ (DB mới tinh: 01 đã tạo đúng tên) thì preConditions không
+  # khớp -> MARK_RAN, bỏ qua an toàn.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.1.0-02-rename-questiontags-back
+      author: team
+      comment: "Đổi question_tags trở lại QuestionTags cho khớp @JoinTable trong Question.java"
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: question_tags
+      changes:
+        - renameTable:
+            oldTableName: question_tags
+            newTableName: QuestionTags
+
+  - changeSet:
+      id: v1.1.0-02-rename-tags-columns-back
+      author: team
+      comment: "Đổi tags.tag_name / tags.created_at trở lại TagName / CreatedAt"
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: Tags
+            columnName: tag_name
+      changes:
+        - renameColumn:
+            tableName: Tags
+            oldColumnName: tag_name
+            newColumnName: TagName
+            columnDataType: VARCHAR(50)
+        - renameColumn:
+            tableName: Tags
+            oldColumnName: created_at
+            newColumnName: CreatedAt
+            columnDataType: DATETIME
+        # MySQL CHANGE COLUMN làm mất NOT NULL / DEFAULT nên khai báo lại
+        - addNotNullConstraint:
+            tableName: Tags
+            columnName: TagName
+            columnDataType: VARCHAR(50)
+        - addDefaultValue:
+            tableName: Tags
+            columnName: CreatedAt
+            columnDataType: DATETIME
+            defaultValueComputed: CURRENT_TIMESTAMP

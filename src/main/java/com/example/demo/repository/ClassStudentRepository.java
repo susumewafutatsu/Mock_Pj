@@ -24,4 +24,37 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, Clas
      */
     @Query("select cs.id.classId from ClassStudent cs where cs.id.studentId = :studentId")
     List<Integer> findClassIdsByStudentId(@Param("studentId") String studentId);
+
+    /**
+     * Tất cả học sinh trong một lớp (giáo viên xem danh sách).
+     */
+    List<ClassStudent> findByClassEntity_ClassId(Integer classId);
+
+    /**
+     * Sĩ số của lớp — dùng trong ClassResponse để tránh load toàn bộ entity.
+     */
+    long countByClassEntity_ClassId(Integer classId);
+
+    /**
+     * Sĩ số của cả một tập lớp trong một câu truy vấn.
+     *
+     * Trang "lớp của tôi" trước đây gọi {@link #countByClassEntity_ClassId} cho
+     * từng lớp, cộng thêm một lượt load toàn bộ danh sách học sinh của lớp chỉ
+     * để lấy ra ClassEntity — ba lớp là bảy câu truy vấn. Gộp lại còn một.
+     *
+     * Người gọi phải tự chặn danh sách rỗng.
+     */
+    @Query("""
+            select cs.id.classId as classId, count(cs) as total
+            from ClassStudent cs
+            where cs.id.classId in :classIds
+            group by cs.id.classId
+            """)
+    List<ClassHeadcount> countByClassIdIn(@Param("classIds") java.util.Collection<Integer> classIds);
+
+    /** Một dòng của {@link #countByClassIdIn}. */
+    interface ClassHeadcount {
+        Integer getClassId();
+        long getTotal();
+    }
 }

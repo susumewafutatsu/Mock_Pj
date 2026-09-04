@@ -52,6 +52,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!--
+          Pool kết nối cho Lettuce. Bắt buộc phải có nếu application.yml bật
+          spring.data.redis.lettuce.pool.enabled — thiếu nó thì app không khởi
+          động nổi (NoClassDefFoundError GenericObjectPoolConfig), chứ không
+          phải chỉ chạy chậm. Không có pool thì mọi request dùng chung một kết
+          nối, đúng lúc cả lớp vào thi là chỗ nghẽn.
+        -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
 
         <!-- Security & OAuth2 Client (SSO Google/Microsoft) -->
         <dependency>

@@ -15,6 +15,9 @@ public interface ExamSubmissionRepository extends JpaRepository<ExamSubmission, 
     /** Đề đã có người bắt đầu làm chưa — mốc để khoá snapshot. */
     boolean existsByExamExamId(Integer examId);
 
+    /** Số phiên làm bài của một đề — dùng cho cột "Nộp bài" ở màn giáo viên. */
+    long countByExamExamId(Integer examId);
+
     /**
      * Phiên thi duy nhất của một học sinh trên một đề.
      * Có UNIQUE(ExamID, StudentID) bảo đảm nhiều nhất một dòng.

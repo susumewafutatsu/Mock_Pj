@@ -28,6 +28,20 @@ public class ExamResponse {
      * Được tính bằng giờ server, nên client không cần so sánh startTime /
      * endTime với đồng hồ máy học sinh nữa.
      */
+    /**
+     * Đề này đến với học sinh theo đường nào.
+     *
+     * Trước đây client phải suy ra bằng {@code className == null}, tức là dựa
+     * vào một trường có thể null vì lý do khác (dữ liệu cũ, lớp bị xoá) để
+     * quyết định hiển thị. Giờ nó là một giá trị được server nói thẳng.
+     */
+    public enum Source {
+        /** Đề của một lớp học sinh đang học — bài giáo viên giao. */
+        CLASS,
+        /** Đề luyện tập tự do, học sinh tự chọn làm. */
+        PRACTICE
+    }
+
     public enum Availability {
         /** Chưa tới giờ mở đề. */
         UPCOMING,
@@ -51,10 +65,19 @@ public class ExamResponse {
     private boolean adaptive;
     private int totalQuestions;
 
-    /** null nếu là đề luyện tập tự do, không thuộc lớp nào. */
+    /** CLASS hay PRACTICE. Không bao giờ null. */
+    private Source source;
+
+    /** null khi source là PRACTICE. Có để client mở được trang lớp tương ứng. */
+    private Integer classId;
     private String className;
-    private String subjectName;
+
+    /** Trình độ / môn học — client dùng làm bộ lọc ở trang đề luyện tập. */
+    private Integer levelId;
     private String levelName;
+    private Integer subjectId;
+    private String subjectName;
+
     private String teacherName;
 
     // ── Trạng thái riêng của học sinh đang đăng nhập ───────────────────────

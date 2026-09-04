@@ -73,6 +73,17 @@ public class SecurityConfig {
                                 new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
                                 new org.springframework.security.web.util.matcher.AntPathRequestMatcher("/api/**")
                         )
+                        // Mặc định Spring trả body {"error":"Forbidden","message":""} nên client
+                        // chỉ đọc được chữ "Forbidden". Ghi thẳng ApiResponse để người dùng
+                        // hiểu là token đang thuộc tài khoản sai vai trò.
+                        .accessDeniedHandler((request, response, ex) -> {
+                            response.setStatus(org.springframework.http.HttpStatus.FORBIDDEN.value());
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("""
+                                    {"success":false,"message":null,"data":null,\
+                                    "error":"Tài khoản đang đăng nhập không có quyền dùng chức năng này. \
+                                    Hãy đăng xuất và đăng nhập lại bằng đúng tài khoản."}""");
+                        })
                 )
                 .oauth2Login(oauth2 -> oauth2
                         .authorizationEndpoint(endpoint -> endpoint
@@ -94,11 +105,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://127.0.0.1:5173"
-        ));
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

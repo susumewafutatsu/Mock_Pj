@@ -52,15 +52,29 @@ databaseChangeLog:
       file: db/changelog/v1.0.3/01-seed-demo-data.yaml
       relativeToChangelogFile: false
 
+  # ── v1.0.4: Danh mục dùng chung (môn học + trình độ). KHÔNG có context
+  #    nên luôn chạy: cả team đều có cùng bộ LevelID để tạo lớp / tạo đề. ──
+  - include:
+      file: db/changelog/v1.0.4/01-seed-catalog.yaml
+      relativeToChangelogFile: false
+
+  # ── v1.0.5: Đủ đề tự do để nhìn thấy bộ lọc trình độ và thanh phân trang
+  #    hoạt động, cộng một lớp thứ hai để trang chủ có nhiều hơn một nhóm.
+  #    Cũng thuộc context "demo" nên không bật thì bị bỏ qua. ──
+  - include:
+      file: db/changelog/v1.0.5/01-seed-practice-exams.yaml
+      relativeToChangelogFile: false
+
   # ── v1.1.0: Tag cho câu hỏi (phục vụ lọc/tìm kiếm) ───────────
   - include:
       file: db/changelog/v1.1.0/01-create-tags-questiontags-tables.yaml
       relativeToChangelogFile: false
 
   - include:
-      file: db/changelog/v1.1.0/02-rename-questiontags-to-snake-case.yaml
+      file: db/changelog/v1.1.0/02-align-tags-naming-with-schema.yaml
       relativeToChangelogFile: false
 
+  # Seed tag mẫu — context "demo", xem chú thích trong file.
   - include:
-      file: db/changelog/v1.1.0/03-rename-tags-columns-to-snake-case.yaml
+      file: db/changelog/v1.1.0/03-seed-tags.yaml
       relativeToChangelogFile: false

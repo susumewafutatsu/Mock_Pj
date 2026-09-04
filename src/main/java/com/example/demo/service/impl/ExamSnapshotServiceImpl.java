@@ -6,9 +6,12 @@ import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.*;
 import com.example.demo.service.ExamSnapshotService;
+import com.example.demo.service.cache.ExamRedisService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -23,12 +26,15 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
     private final AnswerRepository answerRepository;
     private final ExamSubmissionRepository submissionRepository;
     private final UserRepository userRepository;
+    private final ExamRedisService examRedis;
 
     @Override
     @Transactional
     public int attachQuestions(Integer examId, List<ExamQuestionSelection> selections,
                                String teacherEmail) {
         Exam exam = requireOwnedExam(examId, teacherEmail);
+        // có 1 lỗi ẩn là trong khoảng thời gian hệ thống check xong 
+        // mà có sinh viên nộp bài mà lúc đó giáo viên lại sửa thì sẽ có lỗi
         if (submissionRepository.existsByExamExamId(examId)) {
             throw new BusinessException("Đề đã có học sinh làm bài, không thể thêm câu hỏi");
         }
@@ -63,6 +69,9 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
             snapshotAnswers(examQuestion, source);
             added++;
         }
+        if (added > 0) {
+            evictPaperCache(examId);
+        }
         return added;
     }
 
@@ -93,6 +102,7 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
                 .deleteByExamQuestion_Exam_ExamIdAndExamQuestion_Question_QuestionId(examId, questionId);
         snapshotAnswerRepository.flush();
         snapshotAnswers(examQuestion, source);
+        evictPaperCache(examId);
     }
 
     @Override
@@ -108,9 +118,34 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
                         "Câu hỏi id=" + questionId + " không nằm trong đề id=" + examId));
         // ExamQuestionAnswers có FK ON DELETE CASCADE nên snapshot đáp án tự đi theo.
         examQuestionRepository.delete(examQuestion);
+        evictPaperCache(examId);
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
+    /**
+     * Bỏ bản cache đề thi trong Redis sau khi cấu trúc đề đổi.
+     *
+     * Chỉ xoá SAU KHI transaction commit. Xoá ngay trong thân method thì có một
+     * kẽ hở: cache vừa trống, một học sinh vào phòng thi nạp lại cache từ dữ
+     * liệu CŨ (thay đổi chưa commit), rồi transaction mới commit — cache lại sai
+     * và lần này không còn ai đi xoá nữa.
+     *
+     * Ba method sửa đề ở lớp này đều đã chặn khi đề có bài làm, nên trên thực tế
+     * hiếm khi có cache để xoá. Vẫn gọi vì đây là nơi duy nhất biết đề vừa đổi:
+     * ràng buộc kia là quy tắc nghiệp vụ, có thể nới ra sau, còn cache sai thì
+     * học sinh làm nhầm đề.
+     */
+    private void evictPaperCache(Integer examId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            examRedis.evictPaper(examId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                examRedis.evictPaper(examId);
+            }
+        });
+    }
 
     /** Sao chép toàn bộ đáp án của câu hỏi vào bảng snapshot của đề thi. */
     private void snapshotAnswers(ExamQuestion examQuestion, Question source) {
