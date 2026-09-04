@@ -78,6 +78,10 @@ public class ExamResponse {
     private Integer subjectId;
     private String subjectName;
 
+    /** null nếu là đề luyện tập tự do, không thuộc lớp nào. */
+    private String className;
+    private String subjectName;
+    private String levelName;
     private String teacherName;
 
     // ── Trạng thái riêng của học sinh đang đăng nhập ───────────────────────

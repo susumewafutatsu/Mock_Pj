@@ -14,6 +14,9 @@ import com.example.demo.dto.response.StudentExamBoardResponse;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.exception.UnauthorizedException;
 import com.example.demo.repository.ClassRepository;
+import com.example.demo.dto.response.ExamResponse;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.exception.UnauthorizedException;
 import com.example.demo.repository.ClassStudentRepository;
 import com.example.demo.repository.ExamQuestionRepository;
 import com.example.demo.repository.ExamRepository;
@@ -42,6 +45,17 @@ import java.util.Set;
  * Ba lối vào (trang chủ, đề của một lớp, đề luyện tập) dùng chung một bộ hàm
  * dựng {@link ExamResponse}, nên trạng thái của một đề luôn được tính giống
  * nhau bất kể học sinh mở nó từ màn hình nào.
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Danh sách đề của học sinh.
+ *
+ * Toàn bộ method chỉ đọc. Ba query cố định bất kể có bao nhiêu đề:
+ * lớp của học sinh, các đề nhìn thấy được (đã join fetch lớp/môn/giáo viên),
+ * và các phiên làm bài của học sinh; số câu mỗi đề lấy thêm một query gộp.
+ * Không có vòng lặp nào đi xuống DB.
  */
 @Service
 @RequiredArgsConstructor
@@ -275,6 +289,31 @@ public class ExamServiceImpl implements ExamService {
         List<ExamResponse> rows = new ArrayList<>(exams.size());
         for (Exam exam : exams) {
             rows.add(toResponse(exam, source, ctx));
+    private final UserRepository userRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExamResponse> getExamsForStudent(String studentEmail) {
+        User student = requireStudent(studentEmail);
+
+        List<Integer> classIds = classStudentRepository.findClassIdsByStudentId(student.getUserId());
+        List<Exam> exams = classIds.isEmpty()
+                ? examRepository.findFreePracticeExams()
+                : examRepository.findVisibleToStudent(classIds);
+        if (exams.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Integer, Long> questionCounts = questionCountsOf(exams);
+        Map<Integer, ExamSubmission> submissions = submissionsOf(student);
+
+        LocalDateTime now = LocalDateTime.now();
+        List<ExamResponse> rows = new ArrayList<>(exams.size());
+        for (Exam exam : exams) {
+            rows.add(toResponse(exam,
+                    submissions.get(exam.getExamId()),
+                    questionCounts.getOrDefault(exam.getExamId(), 0L).intValue(),
+                    now));
         }
         return rows;
     }
@@ -288,6 +327,12 @@ public class ExamServiceImpl implements ExamService {
 
         ExamResponse.Availability availability =
                 resolveAvailability(exam, submission, totalQuestions, ctx.now());
+    private ExamResponse toResponse(Exam exam, ExamSubmission submission, int totalQuestions,
+                                    LocalDateTime now) {
+        ClassEntity classEntity = exam.getClassEntity();
+        SubjectLevel level = exam.getLevel();
+
+        ExamResponse.Availability availability = resolveAvailability(exam, submission, totalQuestions, now);
         boolean inProgress = availability == ExamResponse.Availability.IN_PROGRESS;
 
         return ExamResponse.builder()
@@ -307,6 +352,10 @@ public class ExamServiceImpl implements ExamService {
                         ? null : level.getSubject().getSubjectId())
                 .subjectName(level == null || level.getSubject() == null
                         ? null : level.getSubject().getSubjectName())
+                .className(classEntity == null ? null : classEntity.getClassName())
+                .subjectName(level == null || level.getSubject() == null
+                        ? null : level.getSubject().getSubjectName())
+                .levelName(level == null ? null : level.getLevelName())
                 .teacherName(exam.getCreatedBy() == null ? null : exam.getCreatedBy().getFullName())
                 .availability(availability)
                 .submissionId(submission == null ? null : submission.getSubmissionId())
@@ -339,6 +388,22 @@ public class ExamServiceImpl implements ExamService {
                 .build();
     }
 
+                .remainingSeconds(inProgress ? submission.remainingSeconds(now) : 0L)
+                .totalScore(submission == null || submission.isInProgress()
+                        ? null : submission.getTotalScore())
+                .submittedAt(submission == null ? null : submission.getSubmittedAt())
+                .serverTime(now)
+                .build();
+    }
+
+    /**
+     * Trạng thái của đề với học sinh đang đăng nhập.
+     *
+     * Thứ tự xét quan trọng: đã nộp thì không quan tâm đề còn mở hay không nữa
+     * (mỗi đề chỉ được làm một lần), và một phiên đang dở đã quá ExpiresAt vẫn
+     * được coi là SUBMITTED — bài đó chắc chắn sẽ bị nộp tự động ở request kế
+     * tiếp hoặc bởi job quét, nên không nên hiện nút "Tiếp tục" cho nó.
+     */
     private ExamResponse.Availability resolveAvailability(Exam exam, ExamSubmission submission,
                                                           int totalQuestions, LocalDateTime now) {
         if (submission != null) {
@@ -435,6 +500,9 @@ public class ExamServiceImpl implements ExamService {
             return counts;
         }
         List<Integer> examIds = exams.stream().map(Exam::getExamId).toList();
+    private Map<Integer, Long> questionCountsOf(List<Exam> exams) {
+        List<Integer> examIds = exams.stream().map(Exam::getExamId).toList();
+        Map<Integer, Long> counts = new HashMap<>();
         for (ExamQuestionRepository.ExamQuestionCount row
                 : examQuestionRepository.countByExamIdIn(examIds)) {
             counts.put(row.getExamId(), row.getTotal());

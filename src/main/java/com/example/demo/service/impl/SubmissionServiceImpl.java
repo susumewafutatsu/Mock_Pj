@@ -40,6 +40,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -135,6 +140,10 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (lock == LockState.ACQUIRED) {
             releaseStartLockAfterCommit(examId, student.getUserId());
         }
+        // Nhánh tạo mới: khoá dòng đề thi để hai request song song (double-click,
+        // hai tab) không cùng lúc thấy "chưa có phiên" rồi cùng insert.
+        examRepository.findByIdForUpdate(examId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
 
         Optional<ExamSubmission> afterLock = submissionRepository
                 .findByExam_ExamIdAndStudent_UserId(examId, student.getUserId());
@@ -220,6 +229,8 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         // Quay lại được tính là còn sống -> tắt cờ nghi rớt mạng.
         markAlive(session, now);
+        session.setLastActiveAt(now);
+        session.setAtRiskStatus(false);
         return toSessionResponse(exam, session, true);
     }
 
@@ -257,6 +268,8 @@ public class SubmissionServiceImpl implements SubmissionService {
         SubmissionDetail detail = upsertAnswer(examId, session, request, now);
 
         markAlive(session, now);
+        session.setLastActiveAt(now);
+        session.setAtRiskStatus(false);
 
         return AnswerSavedResponse.builder()
                 .submissionId(session.getSubmissionId())
@@ -344,6 +357,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 // Chỉ ghi nhận "còn sống". ExpiresAt tuyệt đối không bị nới ra:
                 // heartbeat dùng để phát hiện rớt mạng, không dùng để bù giờ.
                 markAlive(session, now);
+                session.setLastActiveAt(now);
+                session.setAtRiskStatus(false);
             }
         }
 
@@ -458,6 +473,15 @@ public class SubmissionServiceImpl implements SubmissionService {
         // Luôn hạ cờ: đây là dữ liệu giáo viên đang nhìn, không được để trễ.
         // Gán lại đúng giá trị cũ thì Hibernate không sinh UPDATE nào.
         session.setAtRiskStatus(false);
+        List<ExamSubmission> silent = submissionRepository
+                .findByStatusAndAtRiskStatusFalseAndLastActiveAtLessThan(
+                        SubmissionStatus.IN_PROGRESS, threshold);
+        silent.forEach(session -> session.setAtRiskStatus(true));
+        if (!silent.isEmpty()) {
+            log.info("Đánh dấu AtRiskStatus cho {} phiên im lặng quá {} giây",
+                    silent.size(), silenceSeconds);
+        }
+        return silent.size();
     }
 
     /**
@@ -584,6 +608,16 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         for (ExamQuestionView question : questions) {
             SubmissionDetail detail = details.get(question.getQuestionId());
+        List<ExamQuestion> examQuestions =
+                examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId());
+        Map<Integer, SubmissionDetail> details = detailsOf(session);
+
+        List<ExamQuestionView> questions = new ArrayList<>();
+        int answered = 0;
+
+        for (ExamQuestion examQuestion : examQuestions) {
+            Integer questionId = examQuestion.getId().getQuestionId();
+            SubmissionDetail detail = details.get(questionId);
             Integer selectedId = selectedIdOf(detail);
             String essay = detail == null ? null : detail.getEssayResponse();
             if (selectedId != null || essay != null) {
@@ -595,6 +629,17 @@ public class SubmissionServiceImpl implements SubmissionService {
             question.setSelectedSnapshotAnswerId(selectedId);
             question.setEssayResponse(essay);
             question.setAnsweredAt(detail == null ? null : detail.getAnsweredAt());
+            questions.add(ExamQuestionView.builder()
+                    .questionId(questionId)
+                    .questionOrder(examQuestion.getQuestionOrder())
+                    .points(pointsOf(examQuestion))
+                    .content(examQuestion.resolveContent())
+                    .questionType(examQuestion.resolveType())
+                    .options(optionsOf(exam.getExamId(), questionId, examQuestion.resolveType()))
+                    .selectedSnapshotAnswerId(selectedId)
+                    .essayResponse(essay)
+                    .answeredAt(detail == null ? null : detail.getAnsweredAt())
+                    .build());
         }
 
         return ExamSessionResponse.builder()

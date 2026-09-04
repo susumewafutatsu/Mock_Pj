@@ -15,6 +15,7 @@ import java.util.Optional;
 @Repository
 public interface QuestionRepository
         extends JpaRepository<Question, Integer>, JpaSpecificationExecutor<Question> {
+public interface QuestionRepository extends JpaRepository<Question, Integer> {
 
     Optional<Question> findByQuestionIdAndBank_BankIdAndIsDeletedFalse(Integer questionId, Integer bankId);
 

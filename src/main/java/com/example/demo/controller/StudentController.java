@@ -13,6 +13,7 @@ import com.example.demo.dto.response.PracticeExamsResponse;
 import com.example.demo.dto.response.StudentExamBoardResponse;
 import com.example.demo.service.ExamService;
 import com.example.demo.service.StudentClassService;
+import com.example.demo.service.ExamService;
 import com.example.demo.service.SubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +63,11 @@ public class StudentController {
      *
      * Bản trước trả một danh sách phẳng trộn cả hai loại đề — xem
      * {@link ExamService} để biết vì sao đã tách ra.
+
+    /**
+     * Danh sách đề học sinh được làm: đề của các lớp em đang học, cộng đề luyện
+     * tập tự do. Mỗi dòng kèm trạng thái riêng của em đó (đang mở / đang làm dở
+     * / đã nộp / đã đóng) nên client không phải tự so mốc thời gian.
      *
      * Không trả câu hỏi — nội dung đề chỉ mở ra ở endpoint start.
      */
@@ -111,6 +117,16 @@ public class StudentController {
                 studentClassService.getMyClasses(me.getUsername()));
     }
 
+    public ApiResponse<List<ExamResponse>> exams(@AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(examService.getExamsForStudent(me.getUsername()));
+    }
+
+    /**
+     * Vào phòng thi. Idempotent: gọi bao nhiêu lần cũng chỉ có một phiên thi,
+     * lần sau trả về đúng phiên đang dở kèm các đáp án đã chọn.
+     * Trả 409 nếu học sinh đã nộp bài đề này, đề chưa mở / đã đóng, hoặc phiên
+     * đang dở đã hết giờ (bài được nộp tự động trước khi báo lỗi).
+     */
     @PostMapping("/exams/{examId}/start")
     public ApiResponse<ExamSessionResponse> start(@PathVariable Integer examId,
                                                  @AuthenticationPrincipal UserDetails me) {
@@ -120,12 +136,20 @@ public class StudentController {
                 session);
     }
 
+    /**
+     * Khôi phục phiên sau khi mất kết nối. Không tạo phiên mới — trả 404 nếu
+     * học sinh chưa từng bắt đầu đề này.
+     */
     @GetMapping("/exams/{examId}/session")
     public ApiResponse<ExamSessionResponse> session(@PathVariable Integer examId,
                                                     @AuthenticationPrincipal UserDetails me) {
         return ApiResponse.success(submissionService.getSession(examId, me.getUsername()));
     }
 
+    /**
+     * Autosave một câu trả lời. Gọi ngay khi học sinh bấm chọn, không đợi nộp bài.
+     * Gửi lại cùng một câu nhiều lần là an toàn (upsert).
+     */
     @PutMapping("/exams/{examId}/answers")
     public ApiResponse<AnswerSavedResponse> saveAnswer(@PathVariable Integer examId,
                                                        @Valid @RequestBody SaveAnswerRequest request,
@@ -133,6 +157,10 @@ public class StudentController {
         return ApiResponse.success(submissionService.saveAnswer(examId, request, me.getUsername()));
     }
 
+    /**
+     * Nhịp sống của client, gọi mỗi 15-30 giây. Chỉ cập nhật LastActiveAt để
+     * phát hiện rớt mạng — KHÔNG cộng bù giờ cho thời gian mất kết nối.
+     */
     @PostMapping("/exams/{examId}/heartbeat")
     public ApiResponse<HeartbeatResponse> heartbeat(@PathVariable Integer examId,
                                                     @AuthenticationPrincipal UserDetails me) {
