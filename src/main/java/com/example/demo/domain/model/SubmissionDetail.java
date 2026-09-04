@@ -34,6 +34,7 @@ public class SubmissionDetail {
     @JoinColumn(name = "QuestionID", nullable = false)
     private Question question;
 
+
     /**
      * Đáp án học sinh chọn, tính theo snapshot của đề thi.
      * Đây là cột dùng để chấm và để giải thích lại kết quả về sau.
@@ -42,6 +43,7 @@ public class SubmissionDetail {
     @JoinColumn(name = "SelectedSnapshotAnswerID")
     private ExamQuestionAnswer selectedSnapshotAnswer;
 
+  
     /**
      * Đáp án gốc trong ngân hàng câu hỏi — chỉ để truy vết.
      * KHÔNG dùng cột này để chấm điểm: nội dung của nó có thể đã bị sửa

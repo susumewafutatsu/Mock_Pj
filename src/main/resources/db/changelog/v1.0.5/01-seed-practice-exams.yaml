@@ -1,0 +1,238 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # DỮ LIỆU ĐỂ TEST MÀN HÌNH CHỌN ĐỀ — context "demo", không chạy mặc định.
+  #
+  # Vì sao cần thêm file này: v1.0.3 chỉ có ĐÚNG MỘT đề tự do (ExamID 9002)
+  # ở đúng một trình độ. Với ngần đó dữ liệu thì hai thứ vừa làm không thể
+  # nhìn thấy được:
+  #   - Bộ lọc trình độ chỉ hiện một ô, không có gì để chọn.
+  #   - Thanh phân trang không xuất hiện (chỉ hiện khi có từ 2 trang).
+  # File này seed đủ đề để cả hai lộ ra ngay ở màn hình đầu tiên.
+  #
+  # Cũng thêm một lớp thứ hai, để trang chủ có nhiều hơn một nhóm lớp —
+  # nếu chỉ có một lớp thì việc "nhóm theo lớp" nhìn không khác gì danh
+  # sách phẳng cũ.
+  #
+  # ID trong dải 9101+ (dải 9001-9099 đã thuộc v1.0.3) nên hai file không đụng nhau.
+  #
+  # Nạp bằng: mvnw spring-boot:run -Dspring-boot.run.arguments=--spring.liquibase.contexts=demo
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.0.5-01-seed-practice-levels
+      author: team
+      context: demo
+      comment: >-
+        Thêm hai trình độ nữa cho môn demo, để bộ lọc có nhiều hơn một ô để chọn.
+        Cố ý gắn vào môn demo (SubjectID 9001) chứ không vào danh mục thật ở
+        v1.0.4: danh mục đó có preCondition MARK_RAN nên trên máy nào đã tự thêm
+        môn Tiếng Nhật từ trước thì LevelID 1-5 không tồn tại, và file này sẽ gãy.
+      preConditions:
+        - onFail: MARK_RAN
+        - onFailMessage: >-
+            Chưa có môn học demo (SubjectID 9001). Hãy chạy v1.0.3 trước bằng
+            cách bật context demo, rồi chạy lại.
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM Subjects WHERE SubjectID = 9001
+      changes:
+        - insert:
+            tableName: SubjectLevels
+            columns:
+              - column: { name: LevelID, valueNumeric: 9003 }
+              - column: { name: SubjectID, valueNumeric: 9001 }
+              - column: { name: LevelName, value: "N5 (demo)" }
+              - column: { name: Description, value: "Trình độ mẫu để test bộ lọc đề tự do" }
+              - column: { name: DisplayOrder, valueNumeric: 1 }
+        - insert:
+            tableName: SubjectLevels
+            columns:
+              - column: { name: LevelID, valueNumeric: 9004 }
+              - column: { name: SubjectID, valueNumeric: 9001 }
+              - column: { name: LevelName, value: "N3 (demo)" }
+              - column: { name: Description, value: "Trình độ mẫu để test bộ lọc đề tự do" }
+              - column: { name: DisplayOrder, valueNumeric: 3 }
+      rollback:
+        - delete:
+            tableName: SubjectLevels
+            where: LevelID IN (9003, 9004)
+
+  - changeSet:
+      id: v1.0.5-02-seed-second-class
+      author: team
+      context: demo
+      comment: >-
+        Lớp thứ hai cho học sinh 01, để trang chủ có hai nhóm lớp và để nút
+        "bấm vào lớp xem đề của lớp" có nhiều hơn một chỗ để bấm.
+        Chỉ học sinh 01 vào lớp này — học sinh 02 vẫn chỉ có một lớp, nên so
+        hai tài khoản là thấy ngay luật hiển thị theo lớp có chạy đúng không.
+      preConditions:
+        - onFail: MARK_RAN
+        - onFailMessage: >-
+            Bỏ qua: chưa có học sinh demo, hoặc ClassID 9101 đã bị dùng trên DB này.
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM Users WHERE UserID = 'demo-student-01'
+        # Kiểm tra ID còn trống trước khi chèn.
+        #
+        # Bài học từ lần chạy đầu: ID cứng 9002 trùng với một lớp có sẵn trên DB
+        # dev, và Liquibase làm app CHẾT LÚC KHỞI ĐỘNG chứ không chỉ bỏ qua seed.
+        # Dữ liệu mẫu mà chặn cả việc chạy app thì tệ hơn là không có dữ liệu mẫu,
+        # nên mọi changeSet ở dưới đều tự kiểm ID trống trước.
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Classes WHERE ClassID = 9101
+      changes:
+        - insert:
+            tableName: Classes
+            columns:
+              - column: { name: ClassID, valueNumeric: 9101 }
+              - column: { name: ClassName, value: "Lớp N3 cuối tuần (demo)" }
+              - column: { name: CourseCode, value: "DEMO-N3" }
+              - column: { name: TeacherID, value: "demo-teacher-01" }
+              - column: { name: LevelID, valueNumeric: 9004 }
+        - insert:
+            tableName: ClassStudents
+            columns:
+              - column: { name: ClassID, valueNumeric: 9101 }
+              - column: { name: StudentID, value: "demo-student-01" }
+      rollback:
+        - delete:
+            tableName: ClassStudents
+            where: ClassID = 9101
+        - delete:
+            tableName: Classes
+            where: ClassID = 9101
+
+  - changeSet:
+      id: v1.0.5-03-seed-practice-exams
+      author: team
+      context: demo
+      comment: >-
+        27 đề luyện tập tự do (ClassID NULL), chia theo ba trình độ:
+          LevelID 9001 (N4)  -> 14 đề  : trình độ của lớp học sinh 01 đang học,
+                                         nên server tự chọn ô này khi mở trang.
+                                         14 đề = 2 trang với size 12 mặc định,
+                                         tức là thanh phân trang hiện ra ngay.
+          LevelID 9003 (N5)  ->  8 đề
+          LevelID 9004 (N3)  ->  5 đề
+        StartTime / EndTime để NULL: đề tự do không có hạn nộp. Đây cũng là
+        cách kiểm tra phần sắp xếp có xử lý đúng mốc thời gian null hay không.
+      preConditions:
+        - onFail: MARK_RAN
+        - onFailMessage: >-
+            Bỏ qua: chưa có giáo viên demo, hoặc dải ExamID 9101-9129 đã bị dùng.
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM Users WHERE UserID = 'demo-teacher-01'
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Exams WHERE ExamID BETWEEN 9101 AND 9129
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Exams (ExamID, ClassID, LevelID, CreatedBy, Title, DurationMinutes, StartTime, EndTime, IsAdaptive)
+              SELECT 9100 + n,
+                     NULL,
+                     CASE WHEN n <= 14 THEN 9001 WHEN n <= 22 THEN 9003 ELSE 9004 END,
+                     'demo-teacher-01',
+                     CONCAT(
+                       CASE WHEN n <= 14 THEN N'Luyện N4 – ' WHEN n <= 22 THEN N'Luyện N5 – ' ELSE N'Luyện N3 – ' END,
+                       N'Bộ đề số ',
+                       CASE WHEN n <= 14 THEN n WHEN n <= 22 THEN n - 14 ELSE n - 22 END,
+                       N' (demo)'),
+                     15,
+                     NULL, NULL, false
+              FROM (
+                SELECT 1 n UNION ALL SELECT 2  UNION ALL SELECT 3  UNION ALL SELECT 4
+                UNION ALL SELECT 5  UNION ALL SELECT 6  UNION ALL SELECT 7  UNION ALL SELECT 8
+                UNION ALL SELECT 9  UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
+                UNION ALL SELECT 13 UNION ALL SELECT 14 UNION ALL SELECT 15 UNION ALL SELECT 16
+                UNION ALL SELECT 17 UNION ALL SELECT 18 UNION ALL SELECT 19 UNION ALL SELECT 20
+                UNION ALL SELECT 21 UNION ALL SELECT 22 UNION ALL SELECT 23 UNION ALL SELECT 24
+                UNION ALL SELECT 25 UNION ALL SELECT 26 UNION ALL SELECT 27
+              ) seq;
+      rollback:
+        - sql:
+            sql: DELETE FROM Exams WHERE ExamID BETWEEN 9101 AND 9127;
+
+  - changeSet:
+      id: v1.0.5-04-seed-second-class-exams
+      author: team
+      context: demo
+      comment: >-
+        Hai đề cho lớp thứ hai. Một đề đang mở, một đề sắp diễn ra — để nhóm lớp
+        đó trên trang chủ có nội dung, và để kiểm tra thứ tự sắp xếp mới:
+        đề đang mở phải đứng trên đề sắp diễn ra.
+      preConditions:
+        - onFail: MARK_RAN
+        - onFailMessage: "Bỏ qua: lớp demo thứ hai (ClassID 9101) không được tạo ở changeSet trước."
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM Classes WHERE ClassID = 9101
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Exams WHERE ExamID IN (9128, 9129)
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Exams (ExamID, ClassID, LevelID, CreatedBy, Title, DurationMinutes, StartTime, EndTime, IsAdaptive) VALUES
+                (9128, 9101, 9004, 'demo-teacher-01', N'Kiểm tra giữa kỳ N3 (demo)', 25,
+                 DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY), false),
+                (9129, 9101, 9004, 'demo-teacher-01', N'Kiểm tra cuối kỳ N3 (demo)', 40,
+                 DATE_ADD(NOW(), INTERVAL 3 DAY), DATE_ADD(NOW(), INTERVAL 10 DAY), false);
+      rollback:
+        - sql:
+            sql: DELETE FROM Exams WHERE ExamID IN (9128, 9129);
+
+  - changeSet:
+      id: v1.0.5-05-attach-questions
+      author: team
+      context: demo
+      comment: >-
+        Gắn 5 câu trắc nghiệm vào từng đề vừa tạo, KÈM snapshot nội dung và đáp
+        án — đúng như ExamSnapshotService làm khi giáo viên bấm thêm câu hỏi.
+        Không có bước này thì mọi đề đều ở trạng thái NO_QUESTIONS và không bấm
+        vào làm được, tức là không test được gì.
+
+        Dùng lại đúng bộ câu hỏi của v1.0.3 cho mọi đề. Nội dung vì thế không
+        khớp với tên trình độ trên đề — chấp nhận, vì thứ đang cần kiểm là màn
+        hình liệt kê và phân trang, không phải nội dung câu hỏi.
+      preConditions:
+        - onFail: MARK_RAN
+        - onFailMessage: >-
+            Bỏ qua: thiếu câu hỏi demo, hoặc các đề 9101-9129 đã được gắn câu hỏi rồi.
+        - sqlCheck:
+            expectedResult: 5
+            sql: SELECT COUNT(*) FROM Questions WHERE QuestionID IN (9001, 9003, 9006, 9007, 9009)
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM ExamQuestions WHERE ExamID BETWEEN 9101 AND 9129
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO ExamQuestions (ExamID, QuestionID, QuestionOrder, Points,
+                                         QuestionContent, QuestionType, DifficultyLevel, Explanation, SnapshotAt)
+              SELECT e.ExamID, q.QuestionID,
+                     ROW_NUMBER() OVER (PARTITION BY e.ExamID ORDER BY q.QuestionID),
+                     1.00, q.Content, q.QuestionType, q.DifficultyLevel, q.Explanation, NOW()
+              FROM Questions q
+              CROSS JOIN Exams e
+              WHERE e.ExamID BETWEEN 9101 AND 9129
+                AND q.QuestionID IN (9001, 9003, 9006, 9007, 9009);
+
+              INSERT INTO ExamQuestionAnswers (ExamID, QuestionID, OriginalAnswerID, AnswerContent, IsCorrect, AnswerOrder)
+              SELECT eq.ExamID, a.QuestionID, a.AnswerID, a.AnswerContent, a.IsCorrect,
+                     ROW_NUMBER() OVER (PARTITION BY eq.ExamID, a.QuestionID ORDER BY a.AnswerID)
+              FROM ExamQuestions eq
+              JOIN Answers a ON a.QuestionID = eq.QuestionID
+              WHERE eq.ExamID BETWEEN 9101 AND 9129;
+      rollback:
+        - sql:
+            sql: DELETE FROM ExamQuestions WHERE ExamID BETWEEN 9101 AND 9129;

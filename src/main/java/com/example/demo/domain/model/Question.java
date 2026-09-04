@@ -3,12 +3,15 @@ package com.example.demo.domain.model;
 import com.example.demo.domain.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Câu hỏi "sống" trong ngân hàng câu hỏi — giáo viên được sửa tự do.
@@ -68,4 +71,15 @@ public class Question {
     @UpdateTimestamp
     @Column(name = "UpdatedAt")
     private LocalDateTime updatedAt;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "QuestionTags",
+            joinColumns = @JoinColumn(name = "QuestionID"),
+            inverseJoinColumns = @JoinColumn(name = "TagID")
+    )
+    // Nạp tag theo lô khi map cả trang kết quả, tránh N+1 query
+    @BatchSize(size = 50)
+    @Builder.Default
+    private Set<Tag> tags = new LinkedHashSet<>();
 }

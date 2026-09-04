@@ -1,0 +1,68 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # DỮ LIỆU MẪU CHO TAG — context "demo", đi cùng bộ câu hỏi 9001..9010
+  # mà v1.0.3 đã seed. Không có file này thì API tìm kiếm theo tag
+  # (GET /api/v1/questions) luôn trả về rỗng, không test được gì.
+  #
+  # TagID trong dải 9001+ giống quy ước của v1.0.3 / v1.0.5, để không
+  # đụng tag thật do giáo viên tự tạo qua UI về sau.
+  #
+  # TagName luôn là slug chữ thường (xem chú thích trong Tag.java) để so
+  # sánh không phụ thuộc hoa/thường.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.1.0-03-seed-tags
+      author: team
+      context: demo
+      comment: "9 tag mẫu: chủ điểm ngữ pháp + trình độ JLPT."
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Tags WHERE TagID BETWEEN 9001 AND 9099
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Tags (TagID, TagName) VALUES
+                (9001, 'ngu-phap'),
+                (9002, 'tro-tu'),
+                (9003, 'dong-tu'),
+                (9004, 'the-qua-khu'),
+                (9005, 'the-bi-dong'),
+                (9006, 'dieu-kien'),
+                (9007, 'tu-luan'),
+                (9008, 'n5'),
+                (9009, 'n4');
+
+  - changeSet:
+      id: v1.1.0-03-seed-question-tags
+      author: team
+      context: demo
+      comment: >-
+        Gắn tag cho 10 câu hỏi demo. Mỗi câu có 2–4 tag, cố ý chồng lấn nhau
+        để test được cả hai chế độ lọc: ANY (khớp ít nhất 1 tag) và ALL
+        (phải khớp mọi tag). Ví dụ tag "dong-tu" + "n4" chỉ trúng 9006 và 9008.
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM QuestionTags WHERE TagID BETWEEN 9001 AND 9099
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO QuestionTags (QuestionID, TagID) VALUES
+                (9001, 9001), (9001, 9003), (9001, 9008),
+                (9002, 9001), (9002, 9002), (9002, 9008),
+                (9003, 9001), (9003, 9003), (9003, 9004), (9003, 9008),
+                (9004, 9001), (9004, 9009),
+                (9005, 9001), (9005, 9009),
+                (9006, 9001), (9006, 9003), (9006, 9009),
+                (9007, 9001), (9007, 9009),
+                (9008, 9001), (9008, 9003), (9008, 9005), (9008, 9009),
+                (9009, 9001), (9009, 9006), (9009, 9009),
+                (9010, 9007), (9010, 9009);

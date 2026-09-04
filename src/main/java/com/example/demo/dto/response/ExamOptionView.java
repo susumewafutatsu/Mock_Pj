@@ -1,5 +1,8 @@
 package com.example.demo.dto.response;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
@@ -11,6 +14,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ExamOptionView {
 
     /** ID trong bảng snapshot của đề — chính là giá trị client gửi lại khi chọn. */

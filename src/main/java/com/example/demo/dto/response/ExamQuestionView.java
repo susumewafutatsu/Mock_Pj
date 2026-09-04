@@ -1,6 +1,9 @@
 package com.example.demo.dto.response;
 
 import com.example.demo.domain.enums.QuestionType;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,6 +21,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ExamQuestionView {
 
     private Integer questionId;

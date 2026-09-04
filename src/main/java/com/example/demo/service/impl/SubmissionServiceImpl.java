@@ -30,6 +30,16 @@ import com.example.demo.repository.ExamSubmissionRepository;
 import com.example.demo.repository.SubmissionDetailRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.SubmissionService;
+import com.example.demo.service.cache.ExamRedisService;
+import com.example.demo.service.cache.ExamRedisService.LockState;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Cài đặt vòng đời phiên làm bài.
@@ -53,6 +64,19 @@ import java.util.Optional;
  * bị hoàn tác, học sinh gọi lại lần nữa lại rơi vào đúng nhánh đó — nên các
  * method này khai báo không rollback với BusinessException. Mọi BusinessException
  * trong lớp này đều được ném ở vị trí không có thay đổi nào cần huỷ.
+ *
+ * Ghi chú về Redis ({@link ExamRedisService}): MySQL vẫn là nguồn sự thật duy
+ * nhất của phiên thi. Redis chỉ gánh ba việc mà DB làm thì tốn kém:
+ *
+ *   - Cache đề thi đã snapshot, để mỗi lần vào phòng thi không phải dựng lại
+ *     danh sách câu hỏi + lựa chọn bằng hàng chục query.
+ *   - Khoá hẹp theo (đề, học sinh) lúc tạo phiên, thay cho khoá dòng đề thi vốn
+ *     bắt cả lớp xếp hàng đúng lúc vào thi.
+ *   - Nhịp sống (presence) của học sinh, để heartbeat 15 giây một lần không biến
+ *     thành một UPDATE xuống DB mỗi lần.
+ *
+ * Mất Redis không làm hỏng kì thi: mọi lối gọi đều có đường lui về MySQL, đúng
+ * bằng hành vi trước khi có Redis — chỉ chậm hơn.
  */
 @Service
 @RequiredArgsConstructor
@@ -69,6 +93,15 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final SubmissionDetailRepository detailRepository;
     private final ClassStudentRepository classStudentRepository;
     private final UserRepository userRepository;
+    private final ExamRedisService examRedis;
+
+    /**
+     * Ngưỡng im lặng coi là mất kết nối — cũng chính là TTL của key nhịp sống
+     * trong Redis. Dùng chung một giá trị với {@code ExamSessionScheduler} để
+     * key hết hạn đúng lúc job đi quét, không lệch nhau.
+     */
+    @Value("${exam.session.at-risk-after-seconds:90}")
+    private long atRiskAfterSeconds;
 
     // ── Vấn đề 1: một học sinh — một đề — một phiên ─────────────────────────
 
@@ -89,6 +122,24 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         requireExamWindowOpen(exam);
 
+        // Nhánh tạo mới cần chống hai request song song của cùng một em (double
+        // click, hai tab) cùng thấy "chưa có phiên" rồi cùng insert.
+        //
+        // Khoá Redis hẹp theo (đề, học sinh) nên cả lớp bấm "Bắt đầu" cùng lúc
+        // vẫn chạy song song. Chỉ khi Redis không dùng được mới quay về khoá
+        // dòng đề thi dưới DB — đúng hành vi cũ, chậm nhưng vẫn an toàn.
+        LockState lock = examRedis.acquireStartLock(examId, student.getUserId());
+        if (lock == LockState.BUSY) {
+            throw new BusinessException("Yêu cầu vào phòng thi trước đó đang được xử lý, "
+                    + "vui lòng thử lại sau vài giây.");
+        }
+        if (lock == LockState.UNAVAILABLE) {
+            examRepository.findByIdForUpdate(examId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
+        }
+        if (lock == LockState.ACQUIRED) {
+            releaseStartLockAfterCommit(examId, student.getUserId());
+        }
         // Nhánh tạo mới: khoá dòng đề thi để hai request song song (double-click,
         // hai tab) không cùng lúc thấy "chưa có phiên" rồi cùng insert.
         examRepository.findByIdForUpdate(examId)
@@ -115,9 +166,37 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .build();
         submissionRepository.save(session);
 
+        // Mở nhịp sống ngay từ lúc vào phòng, đừng đợi heartbeat đầu tiên: nếu
+        // không, phiên vừa tạo đã bị job quét coi là mất kết nối.
+        examRedis.touchAlive(session.getSubmissionId(), atRiskAfterSeconds);
+
         log.info("Bắt đầu phiên thi submissionId={} examId={} studentId={} expiresAt={}",
                 session.getSubmissionId(), examId, student.getUserId(), session.getExpiresAt());
         return toSessionResponse(exam, session, false);
+    }
+
+    /**
+     * Trả khoá tạo phiên, nhưng chỉ SAU khi transaction kết thúc.
+     *
+     * Trả ngay trong thân method là sai: lúc đó dòng ExamSubmissions vừa insert
+     * chưa commit, request thứ hai giành được khoá sẽ không thấy nó (READ
+     * COMMITTED) và insert thêm một phiên nữa. Đợi tới afterCompletion thì
+     * request sau chắc chắn đọc được phiên vừa tạo và đi nhánh "vào lại phòng".
+     *
+     * Trả cả khi transaction rollback — khi đó không có phiên nào được tạo nên
+     * học sinh phải được thử lại ngay, không phải chờ hết TTL.
+     */
+    private void releaseStartLockAfterCommit(Integer examId, String studentId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            examRedis.releaseStartLock(examId, studentId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                examRedis.releaseStartLock(examId, studentId);
+            }
+        });
     }
 
     @Override
@@ -149,6 +228,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         }
 
         // Quay lại được tính là còn sống -> tắt cờ nghi rớt mạng.
+        markAlive(session, now);
         session.setLastActiveAt(now);
         session.setAtRiskStatus(false);
         return toSessionResponse(exam, session, true);
@@ -187,6 +267,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         SubmissionDetail detail = upsertAnswer(examId, session, request, now);
 
+        markAlive(session, now);
         session.setLastActiveAt(now);
         session.setAtRiskStatus(false);
 
@@ -275,6 +356,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             } else {
                 // Chỉ ghi nhận "còn sống". ExpiresAt tuyệt đối không bị nới ra:
                 // heartbeat dùng để phát hiện rớt mạng, không dùng để bù giờ.
+                markAlive(session, now);
                 session.setLastActiveAt(now);
                 session.setAtRiskStatus(false);
             }
@@ -339,6 +421,58 @@ public class SubmissionServiceImpl implements SubmissionService {
     @Transactional
     public int flagDisconnectedSessions(long silenceSeconds) {
         LocalDateTime threshold = LocalDateTime.now().minusSeconds(silenceSeconds);
+        List<ExamSubmission> candidates = submissionRepository
+                .findByStatusAndAtRiskStatusFalseAndLastActiveAtLessThan(
+                        SubmissionStatus.IN_PROGRESS, threshold);
+        if (candidates.isEmpty()) {
+            return 0;
+        }
+
+        // Câu truy vấn trên chỉ lọc SƠ BỘ. Vì heartbeat không còn ghi
+        // LastActiveAt xuống DB ở mọi nhịp (xem markAlive), cột đó luôn trễ tối
+        // đa một chu kỳ flush, nên một em vẫn đang thi bình thường vẫn có thể
+        // lọt vào danh sách này.
+        //
+        // Redis mới là nơi biết chính xác ai còn nhịp: key exam:alive:* hết hạn
+        // đúng sau silenceSeconds im lặng. Hỏi cả lô trong một pipeline.
+        Optional<Set<Integer>> alive = examRedis.findAlive(
+                candidates.stream().map(ExamSubmission::getSubmissionId).toList());
+
+        int flagged = 0;
+        for (ExamSubmission session : candidates) {
+            // Redis không trả lời -> tin cột LastActiveAt như thời chưa có Redis.
+            if (alive.isPresent() && alive.get().contains(session.getSubmissionId())) {
+                continue;
+            }
+            session.setAtRiskStatus(true);
+            flagged++;
+        }
+        if (flagged > 0) {
+            log.info("Đánh dấu AtRiskStatus cho {}/{} phiên im lặng quá {} giây",
+                    flagged, candidates.size(), silenceSeconds);
+        }
+        return flagged;
+    }
+
+    /**
+     * Ghi nhận học sinh còn sống, ưu tiên ghi vào Redis thay vì DB.
+     *
+     * Nhịp heartbeat đi qua đây mỗi 15-30 giây cho từng học sinh. Nếu mỗi nhịp
+     * đều UPDATE cột LastActiveAt thì một phòng thi 500 em là hơn 30 UPDATE mỗi
+     * giây vào đúng bảng đang chịu tải nặng nhất, chỉ để ghi một mốc thời gian.
+     *
+     * Nên: Redis nhận mọi nhịp (key exam:alive:* với TTL = ngưỡng im lặng), còn
+     * DB chỉ được ghi khi {@code touchAlive} báo đã hết một chu kỳ flush — hoặc
+     * khi Redis chết, lúc đó nó trả về true ở mọi nhịp và hành vi quay lại y như
+     * cũ. Cột LastActiveAt vì thế vẫn dùng được, chỉ trễ tối đa một chu kỳ.
+     */
+    private void markAlive(ExamSubmission session, LocalDateTime now) {
+        if (examRedis.touchAlive(session.getSubmissionId(), atRiskAfterSeconds)) {
+            session.setLastActiveAt(now);
+        }
+        // Luôn hạ cờ: đây là dữ liệu giáo viên đang nhìn, không được để trễ.
+        // Gán lại đúng giá trị cũ thì Hibernate không sinh UPDATE nào.
+        session.setAtRiskStatus(false);
         List<ExamSubmission> silent = submissionRepository
                 .findByStatusAndAtRiskStatusFalseAndLastActiveAtLessThan(
                         SubmissionStatus.IN_PROGRESS, threshold);
@@ -408,6 +542,10 @@ public class SubmissionServiceImpl implements SubmissionService {
         session.setStatus(awaitingManual ? SubmissionStatus.SUBMITTED : SubmissionStatus.GRADED);
         submissionRepository.save(session);
 
+        // Bài đã chốt thì nhịp sống không còn ý nghĩa: dọn ngay để job quét
+        // không phải hỏi Redis về những phiên đã đóng.
+        examRedis.clearSession(session.getSubmissionId());
+
         log.info("Chốt bài submissionId={} examId={} auto={} score={} status={}",
                 session.getSubmissionId(), exam.getExamId(), auto, total, session.getStatus());
         return buildResult(exam, session, examQuestions, details, true, true);
@@ -461,6 +599,15 @@ public class SubmissionServiceImpl implements SubmissionService {
      */
     private ExamSessionResponse toSessionResponse(Exam exam, ExamSubmission session, boolean resumed) {
         LocalDateTime now = LocalDateTime.now();
+        // Phần đề (nội dung câu hỏi + lựa chọn) giống nhau với mọi học sinh nên
+        // lấy từ cache Redis; phần đã làm là của riêng từng em nên luôn đọc DB.
+        List<ExamQuestionView> questions = loadPaper(exam.getExamId());
+        Map<Integer, SubmissionDetail> details = detailsOf(session);
+
+        int answered = 0;
+
+        for (ExamQuestionView question : questions) {
+            SubmissionDetail detail = details.get(question.getQuestionId());
         List<ExamQuestion> examQuestions =
                 examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId());
         Map<Integer, SubmissionDetail> details = detailsOf(session);
@@ -476,6 +623,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             if (selectedId != null || essay != null) {
                 answered++;
             }
+            // Ghép bài làm của em này vào bản đề vừa lấy. An toàn vì loadPaper
+            // luôn trả về một bản dựng riêng cho request (giải mã lại từ Redis
+            // hoặc dựng mới từ DB), không phải object dùng chung.
+            question.setSelectedSnapshotAnswerId(selectedId);
+            question.setEssayResponse(essay);
+            question.setAnsweredAt(detail == null ? null : detail.getAnsweredAt());
             questions.add(ExamQuestionView.builder()
                     .questionId(questionId)
                     .questionOrder(examQuestion.getQuestionOrder())
@@ -501,7 +654,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .serverTime(now)
                 .remainingSeconds(session.remainingSeconds(now))
                 .atRisk(Boolean.TRUE.equals(session.getAtRiskStatus()))
-                .totalQuestions(examQuestions.size())
+                .totalQuestions(questions.size())
                 .answeredQuestions(answered)
                 .questions(questions)
                 .build();
@@ -645,6 +798,47 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         }
         return answered;
+    }
+
+    /**
+     * Bản đề để học sinh làm bài: câu hỏi theo thứ tự, kèm các lựa chọn.
+     *
+     * Đây là phần đắt nhất của mỗi lần vào phòng thi — một query lấy câu hỏi
+     * cộng thêm một query lấy lựa chọn cho TỪNG câu, tức đề 40 câu là 41 query,
+     * và cả lớp vào cùng lúc thì nhân lên bằng sĩ số. Nội dung lại hoàn toàn
+     * giống nhau giữa các em (đề đã snapshot, không đổi giữa chừng), nên đây
+     * đúng là thứ để trong Redis.
+     *
+     * Trả về một bản dựng riêng cho mỗi request — hoặc giải mã lại từ JSON trong
+     * Redis, hoặc dựng mới từ DB — nên phía gọi được phép ghi bài làm của học
+     * sinh vào đó mà không đụng tới ai khác.
+     *
+     * Cache miss hay Redis chết đều đi tiếp bằng đường DB, học sinh không thấy
+     * khác gì ngoài việc chậm hơn một chút.
+     */
+    private List<ExamQuestionView> loadPaper(Integer examId) {
+        Optional<List<ExamQuestionView>> cached = examRedis.getPaper(examId);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<ExamQuestionView> paper = new ArrayList<>();
+        for (ExamQuestion examQuestion : examQuestionRepository
+                .findByExam_ExamIdOrderByQuestionOrderAsc(examId)) {
+            Integer questionId = examQuestion.getId().getQuestionId();
+            paper.add(ExamQuestionView.builder()
+                    .questionId(questionId)
+                    .questionOrder(examQuestion.getQuestionOrder())
+                    .points(pointsOf(examQuestion))
+                    .content(examQuestion.resolveContent())
+                    .questionType(examQuestion.resolveType())
+                    .options(optionsOf(examId, questionId, examQuestion.resolveType()))
+                    .build());
+        }
+        // Ghi cache TRƯỚC khi phía gọi ghép bài làm vào: cái được cất đi phải là
+        // bản đề trắng, không dính đáp án của em vừa gọi.
+        examRedis.putPaper(examId, paper);
+        return paper;
     }
 
     /** Các lựa chọn hiển thị cho học sinh. Không bao giờ kèm cờ đáp án đúng. */

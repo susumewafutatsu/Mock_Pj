@@ -38,3 +38,4 @@ build/
 ### Local artefacts (log chạy thử, bản sao lưu dữ liệu) ###
 *.log
 backup-*.sql
+logs/

@@ -4,10 +4,15 @@ import com.example.demo.dto.request.SaveAnswerRequest;
 import com.example.demo.dto.request.SubmitExamRequest;
 import com.example.demo.dto.response.AnswerSavedResponse;
 import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.ClassResponse;
 import com.example.demo.dto.response.ExamResponse;
 import com.example.demo.dto.response.ExamResultResponse;
 import com.example.demo.dto.response.ExamSessionResponse;
 import com.example.demo.dto.response.HeartbeatResponse;
+import com.example.demo.dto.response.PracticeExamsResponse;
+import com.example.demo.dto.response.StudentExamBoardResponse;
+import com.example.demo.service.ExamService;
+import com.example.demo.service.StudentClassService;
 import com.example.demo.service.ExamService;
 import com.example.demo.service.SubmissionService;
 import jakarta.validation.Valid;
@@ -19,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,8 +33,13 @@ import java.util.List;
 /**
  * Phòng thi của học sinh.
  *
- * Thứ tự client gọi trong một phiên bình thường:
- *   GET    /exams                   -> danh sách đề được làm, kèm trạng thái từng đề
+ * Tìm đề — ba lối vào cho ba màn hình khác nhau:
+ *   GET    /exams                   -> trang chủ: đề nhóm theo lớp + gợi ý đề luyện tập
+ *   GET    /classes                 -> các lớp đang học
+ *   GET    /classes/{id}/exams      -> toàn bộ đề của một lớp
+ *   GET    /practice-exams          -> đề luyện tập tự do, kèm bộ lọc trình độ
+ *
+ * Thứ tự client gọi trong một phiên làm bài bình thường:
  *   POST   /exams/{id}/start        -> lấy đề + expiresAt (gọi lại = vào lại, không tạo phiên mới)
  *   PUT    /exams/{id}/answers      -> mỗi lần chọn đáp án, gọi ngay (autosave)
  *   POST   /exams/{id}/heartbeat    -> 15-30 giây một lần, để server biết còn sống
@@ -45,6 +56,13 @@ public class StudentController {
 
     private final SubmissionService submissionService;
     private final ExamService examService;
+    private final StudentClassService studentClassService;
+
+    /**
+     * Trang chủ: đề của từng lớp (đã nhóm sẵn) cộng một phần gợi ý đề luyện tập.
+     *
+     * Bản trước trả một danh sách phẳng trộn cả hai loại đề — xem
+     * {@link ExamService} để biết vì sao đã tách ra.
 
     /**
      * Danh sách đề học sinh được làm: đề của các lớp em đang học, cộng đề luyện
@@ -54,6 +72,51 @@ public class StudentController {
      * Không trả câu hỏi — nội dung đề chỉ mở ra ở endpoint start.
      */
     @GetMapping("/exams")
+    public ApiResponse<StudentExamBoardResponse> examBoard(@AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(examService.getExamBoard(me.getUsername()));
+    }
+
+    /**
+     * Toàn bộ đề của một lớp. Trả 404 nếu học sinh không học lớp đó — không tiết
+     * lộ lớp có tồn tại hay không cho người ngoài.
+     */
+    @GetMapping("/classes/{classId}/exams")
+    public ApiResponse<List<ExamResponse>> classExams(@PathVariable Integer classId,
+                                                      @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(examService.getClassExams(classId, me.getUsername()));
+    }
+
+    /**
+     * Một trang đề luyện tập tự do, kèm bộ lọc theo trình độ / môn học.
+     *
+     * Không truyền bộ lọc thì server chọn hộ một trình độ theo lớp học sinh đang
+     * học và bật cờ {@code filteredByEnrolledLevels}, để client hiện được lối
+     * thoát "xem tất cả trình độ".
+     *
+     * {@code page} đánh số từ 0. {@code size} bị server kẹp về khoảng cho phép.
+     */
+    @GetMapping("/practice-exams")
+    public ApiResponse<PracticeExamsResponse> practiceExams(
+            @RequestParam(required = false) Integer levelId,
+            @RequestParam(required = false) Integer subjectId,
+            @RequestParam(defaultValue = "false") boolean allLevels,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(examService.getPracticeExams(
+                levelId, subjectId, allLevels, page, size, me.getUsername()));
+    }
+
+    /**
+     * Danh sách lớp học mà học sinh đang đăng ký — cửa vào của
+     * {@code GET /classes/{classId}/exams}.
+     */
+    @GetMapping("/classes")
+    public ApiResponse<List<ClassResponse>> myClasses(@AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Lấy danh sách lớp học thành công",
+                studentClassService.getMyClasses(me.getUsername()));
+    }
+
     public ApiResponse<List<ExamResponse>> exams(@AuthenticationPrincipal UserDetails me) {
         return ApiResponse.success(examService.getExamsForStudent(me.getUsername()));
     }
@@ -125,3 +188,4 @@ public class StudentController {
         return ApiResponse.success(submissionService.getHistory(me.getUsername()));
     }
 }
+

@@ -6,6 +6,12 @@ import com.example.demo.domain.model.Question;
 import com.example.demo.domain.model.QuestionBank;
 import com.example.demo.dto.request.AnswerPayload;
 import com.example.demo.dto.request.QuestionCreateRequest;
+import com.example.demo.dto.request.QuestionSearchRequest;
+import com.example.demo.dto.request.QuestionUpdateRequest;
+import com.example.demo.dto.response.AnswerResponse;
+import com.example.demo.dto.response.PageResponse;
+import com.example.demo.dto.response.QuestionResponse;
+import com.example.demo.dto.response.QuestionSummaryResponse;
 import com.example.demo.dto.request.QuestionUpdateRequest;
 import com.example.demo.dto.response.AnswerResponse;
 import com.example.demo.dto.response.QuestionResponse;
@@ -14,11 +20,15 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.AnswerRepository;
 import com.example.demo.repository.QuestionBankRepository;
 import com.example.demo.repository.QuestionRepository;
+import com.example.demo.repository.TagRepository;
+import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.specification.QuestionSpecifications;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.QuestionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +47,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final AnswerRepository answerRepository;
     private final QuestionBankRepository bankRepository;
     private final UserRepository userRepository;
+    private final TagRepository tagRepository;
 
     @Override
     @Transactional
@@ -229,5 +241,49 @@ public class QuestionServiceImpl implements QuestionService {
                                 .build())
                         .toList())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<QuestionSummaryResponse> searchQuestions(
+            QuestionSearchRequest request, Pageable pageable) {
+
+        Set<String> tags = request.normalizedTags();
+
+        // Tag yêu cầu nhưng không tồn tại trong bảng Tags thì chắc chắn không có câu hỏi nào khớp.
+        // Chặn sớm ở đây để khỏi chạy query nặng lên bảng Questions.
+        if (!tags.isEmpty() && !hasMatchableTags(tags, request.resolvedTagMode())) {
+            return PageResponse.empty(pageable);
+        }
+
+        Specification<Question> spec = buildSpecification(request, tags);
+        Page<Question> page = questionRepository.findAll(spec, pageable);
+
+        return PageResponse.from(page, QuestionSummaryResponse::from);
+    }
+
+    /**
+     * ANY: cần ít nhất 1 tag tồn tại. ALL: cần tất cả tag đều tồn tại.
+     */
+    private boolean hasMatchableTags(Set<String> tags, QuestionSearchRequest.TagMode mode) {
+        Set<String> existing = Set.copyOf(tagRepository.findExistingTagNames(tags));
+        return mode == QuestionSearchRequest.TagMode.ALL
+                ? existing.containsAll(tags)
+                : !existing.isEmpty();
+    }
+
+    private Specification<Question> buildSpecification(QuestionSearchRequest request, Set<String> tags) {
+        Specification<Question> tagSpec = request.resolvedTagMode() == QuestionSearchRequest.TagMode.ALL
+                ? QuestionSpecifications.hasAllTags(tags)
+                : QuestionSpecifications.hasAnyTag(tags);
+
+        return Specification.where(tagSpec)
+                .and(QuestionSpecifications.contentContains(request.likeSafeKeyword()))
+                .and(QuestionSpecifications.hasSubject(request.getSubjectId()))
+                .and(QuestionSpecifications.hasLevel(request.getLevelId()))
+                .and(QuestionSpecifications.hasBank(request.getBankId()))
+                .and(QuestionSpecifications.hasDifficulty(request.getDifficulty()))
+                .and(QuestionSpecifications.hasQuestionType(request.getQuestionType()))
+                .and(QuestionSpecifications.isAiGenerated(request.getIsAiGenerated()));
     }
 }

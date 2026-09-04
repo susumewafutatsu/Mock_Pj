@@ -1,11 +1,11 @@
 server:
   port: 8080
   error:
-    # Cần cho các lỗi có ý nghĩa với người dùng, đặc biệt là 409 lúc thi:
-    # "Đã hết giờ làm bài lúc ... Bài của bạn đã được nộp tự động." Mặc định
-    # Spring bỏ trắng field message nên client chỉ nhận được chữ "Conflict".
-    # GlobalExceptionHandler (đang là stub) làm xong thì bỏ dòng này đi được.
     include-message: always
+
+logging:
+  level:
+    org.springframework.security: DEBUG
 
 spring:
   config:
@@ -35,6 +35,20 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     enabled: true
+    # Danh mục dùng chung (môn học Tiếng Nhật + trình độ N5→N1) nằm ở
+    # db/changelog/v1.0.4/01-seed-catalog.yaml, KHÔNG có context nên luôn nạp:
+    # cả team dùng cùng bộ LevelID, tạo lớp / tạo đề là chạy được ngay.
+    #
+    # Context "demo" BẬT SẴN: mọi người clone repo về, chạy app là có ngay
+    # cùng một bộ dữ liệu mẫu (tài khoản @demo.local, lớp, ngân hàng câu hỏi
+    # 9001-9010, 6 đề thi, tag) mà không phải truyền cờ gì thêm và không phải
+    # gửi file .sql cho nhau. Liquibase ghi nhận changeSet đã chạy trong bảng
+    # DATABASECHANGELOG nên lần khởi động sau nó bỏ qua, không nhân đôi dữ liệu.
+    #
+    # Muốn một DB sạch không có dữ liệu mẫu (ví dụ khi deploy thật): đặt
+    # LIQUIBASE_CONTEXTS=production trong .env — mọi changeSet mang context
+    # "demo" sẽ bị bỏ qua, chỉ còn schema + danh mục dùng chung.
+    contexts: ${LIQUIBASE_CONTEXTS:demo}
     # Bỏ comment dòng dưới (hoặc chạy app với --spring.liquibase.contexts=demo)
     # để nạp dữ liệu mẫu ở db/changelog/v1.0.3/01-seed-demo-data.yaml.
     # Không bật context này thì toàn bộ seed bị bỏ qua — schema vẫn tạo bình thường.
@@ -42,8 +56,21 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      # Timeout PHẢI ngắn. Redis ở đây chỉ là lớp tăng tốc, nếu nó treo thì
+      # request phải fail nhanh để rơi xuống đường MySQL — timeout mặc định
+      # 60 giây sẽ biến "Redis chậm" thành "cả phòng thi đứng hình".
+      timeout: 1s
+      connect-timeout: 1s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 500ms
 
   security:
     oauth2:
@@ -78,7 +105,24 @@ exam:
     at-risk-scan-interval-ms: 30000
     # Im lặng quá bao lâu thì coi là mất kết nối. Đặt gấp 2-3 lần chu kỳ
     # heartbeat của client (client gọi mỗi 15-30 giây).
+    # Cũng chính là TTL của key nhịp sống exam:alive:* trong Redis.
     at-risk-after-seconds: 90
+
+  # ── Phần Redis gánh hộ MySQL ─────────────────────────────────────
+  # Redis KHÔNG giữ bài làm hay điểm — những thứ đó nằm trong MySQL. Mất Redis
+  # thì hệ thống tự quay về đường DB, kì thi vẫn chạy, chỉ chậm hơn.
+  redis:
+    # Đề thi đã snapshot được cache bao lâu. Giáo viên sửa đề là cache bị xoá
+    # ngay, TTL này chỉ là lưới an toàn cho việc sửa dữ liệu thẳng dưới DB.
+    paper-ttl-seconds: 600
+    # Khoá chống tạo hai phiên cho cùng một học sinh. Chỉ cần đủ dài cho một
+    # transaction ngắn; khoá được trả ngay sau khi commit.
+    start-lock-seconds: 10
+    # Bao lâu mới ghi LastActiveAt xuống MySQL một lần. Redis nhận mọi nhịp
+    # heartbeat, DB chỉ nhận một lần mỗi chu kỳ này.
+    # PHẢI nhỏ hơn hẳn at-risk-after-seconds, nếu không cột LastActiveAt lạc
+    # hậu tới mức job quét tưởng nhầm học sinh đang thi là đã rớt mạng.
+    last-active-flush-seconds: 30
 
 # ── Swagger UI ─────────────────────────────────────────────────
 springdoc:
