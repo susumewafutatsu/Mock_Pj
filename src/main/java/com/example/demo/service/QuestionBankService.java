@@ -11,7 +11,7 @@ import java.util.List;
  */
 public interface QuestionBankService {
 
-    /** Danh sách ngân hàng của giáo viên đang đăng nhập, kèm số câu hỏi. */
+    /** Danh sách ngân hàng của người ra đề đang đăng nhập, kèm số câu hỏi. */
     List<QuestionBankResponse> listMine(String teacherEmail);
 
     QuestionBankResponse create(QuestionBankCreateRequest request, String teacherEmail);

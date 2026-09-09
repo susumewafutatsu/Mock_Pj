@@ -12,9 +12,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 /**
  * Hai job nền của phiên thi.
  *
- * Vì sao cần job dù mọi request đã tự kiểm tra hết giờ: học sinh đóng laptop
+ * Vì sao cần job dù mọi request đã tự kiểm tra hết giờ: thí sinh đóng laptop
  * hoặc mất mạng luôn cho tới hết giờ thì không còn request nào để kích hoạt
- * việc nộp bài. Không có job này, phiên đó nằm mãi ở IN_PROGRESS và giáo viên
+ * việc nộp bài. Không có job này, phiên đó nằm mãi ở IN_PROGRESS và người ra đề
  * không bao giờ thấy điểm.
  *
  * Job chỉ là lưới an toàn, không phải đường chính: bài vẫn được nộp ngay ở
@@ -54,7 +54,7 @@ public class ExamSessionScheduler {
         try {
             submissionService.flagDisconnectedSessions(atRiskAfterSeconds);
         } catch (Exception e) {
-            log.error("Job phát hiện học sinh mất kết nối lỗi", e);
+            log.error("Job phát hiện thí sinh mất kết nối lỗi", e);
         }
     }
 }

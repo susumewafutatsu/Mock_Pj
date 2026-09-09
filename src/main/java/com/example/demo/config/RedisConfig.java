@@ -17,17 +17,17 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import static com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS;
 
 /**
- * Cấu hình Redis cho phần "nóng" của kì thi.
+ * Cấu hình Redis cho phần "nóng" của bài thi.
  *
  * Nguyên tắc: Redis KHÔNG phải nguồn sự thật. MySQL vẫn giữ toàn bộ phiên thi,
- * đáp án và điểm. Redis chỉ giữ ba thứ được phép mất mà không hỏng kì thi:
+ * đáp án và điểm. Redis chỉ giữ ba thứ được phép mất mà không hỏng bài thi:
  *
  *   1. Bản cache đề thi (câu hỏi + lựa chọn) — dựng lại được từ DB.
  *   2. Khoá tạo phiên — mất khoá thì còn UNIQUE(ExamID, StudentID) chốt cuối.
  *   3. Presence heartbeat — mất thì quay lại so cột LastActiveAt như trước.
  *
  * Vì thế toàn bộ code gọi Redis đều bọc try/catch và có đường lui về MySQL:
- * Redis chết là hệ thống chậm đi, không phải là kì thi dừng.
+ * Redis chết là hệ thống chậm đi, không phải là bài thi dừng.
  *
  * Hai template được khai riêng vì hai nhu cầu khác nhau:
  * - {@link StringRedisTemplate} cho khoá và presence: giá trị chỉ là chuỗi ngắn,

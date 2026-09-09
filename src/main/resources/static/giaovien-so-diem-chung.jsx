@@ -6,7 +6,7 @@ import {
 
 /* ============================================================
    TOKENS — "Sổ Điểm Chung": cuốn sổ điểm giấy dùng chung.
-   Vai trò Giáo viên viết bằng mực xanh.
+   Vai trò Người ra đề viết bằng mực xanh.
    ============================================================ */
 const TOKENS = `
 @import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -86,7 +86,7 @@ const NAV = [
   { id: "classes", label: "Lớp học của tôi", icon: GraduationCap },
   { id: "bank", label: "Ngân hàng câu hỏi", icon: Layers },
   { id: "create", label: "Tạo đề thi", icon: Sparkles },
-  { id: "results", label: "Kết quả học sinh", icon: TrendingUp },
+  { id: "results", label: "Kết quả thí sinh", icon: TrendingUp },
 ];
 
 /* ---------------- Primitives ---------------- */
@@ -144,7 +144,7 @@ function ClassesView() {
               <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--ink-wash)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Users size={14} color="var(--ink)" />
               </div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13.5 }}>{c.students} học sinh</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 13.5 }}>{c.students} thí sinh</span>
             </div>
           </div>
         ))}
@@ -230,7 +230,7 @@ function CreateView() {
             </div>
           ))}
           <p style={{ fontSize: 12, color: "var(--text-soft)", marginTop: 16 }}>
-            {adaptive ? "Độ khó sẽ tự điều chỉnh theo năng lực từng học sinh trong lúc làm bài." : "Toàn bộ học sinh nhận cùng một đề cố định."}
+            {adaptive ? "Độ khó sẽ tự điều chỉnh theo năng lực từng thí sinh trong lúc làm bài." : "Toàn bộ thí sinh nhận cùng một đề cố định."}
           </p>
         </div>
       </div>
@@ -241,10 +241,10 @@ function CreateView() {
 function ResultsView() {
   return (
     <div>
-      <SectionHeading eyebrow="Trang 04 · Chấm điểm" title="Kết quả học sinh — Kanji bài 6-10" />
+      <SectionHeading eyebrow="Trang 04 · Chấm điểm" title="Kết quả thí sinh — Kanji bài 6-10" />
       <div className="gb-card" style={{ overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.3fr", padding: "12px 20px", borderBottom: "1px solid var(--border-soft)", fontSize: 12, color: "var(--text-soft)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          <span>Học sinh</span><span>Điểm</span><span>Cảnh báo AI</span>
+          <span>Thí sinh</span><span>Điểm</span><span>Cảnh báo AI</span>
         </div>
         {RESULTS.map((r, i) => (
           <div key={i} className="gb-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.3fr", padding: "14px 20px", alignItems: "center", borderBottom: i < RESULTS.length - 1 ? "1px solid var(--border-soft)" : "none", fontSize: 13.5 }}>
@@ -281,7 +281,7 @@ export default function TeacherApp() {
           </div>
           <div>
             <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, margin: 0, color: "var(--paper-card)" }}>Sổ Điểm Chung</p>
-            <p style={{ fontSize: 11, color: "#B8C6D8", margin: 0 }}>Bảng điều khiển Giáo viên</p>
+            <p style={{ fontSize: 11, color: "#B8C6D8", margin: 0 }}>Bảng điều khiển Người ra đề</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>

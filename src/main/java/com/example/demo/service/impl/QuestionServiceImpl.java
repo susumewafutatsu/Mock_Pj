@@ -177,7 +177,7 @@ public class QuestionServiceImpl implements QuestionService {
     /**
      * Trả về ngân hàng câu hỏi nếu người gọi đúng là chủ sở hữu.
      * Ném 404 (không phải 403) khi không phải chủ, để không tiết lộ rằng
-     * bankId đó tồn tại và thuộc về giáo viên khác.
+     * bankId đó tồn tại và thuộc về người ra đề khác.
      */
     private QuestionBank requireOwnedBank(Integer bankId, String teacherEmail) {
         String teacherId = userRepository.findByEmail(teacherEmail)

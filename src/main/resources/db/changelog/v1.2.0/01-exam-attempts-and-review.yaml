@@ -1,0 +1,132 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # Nhiều lượt làm bài, và xem lại bài đã làm.
+  #
+  # Tới v1.0.2, hệ thống đóng cứng ở giả định "một học sinh — một đề —
+  # một phiên", chốt bằng UNIQUE(ExamID, StudentID). Giả định đó đúng
+  # với bài kiểm tra, nhưng sai với phần lớn nội dung của một nền tảng
+  # ôn thi: đề luyện tập sinh ra để làm đi làm lại.
+  #
+  # Ba thay đổi:
+  #
+  #   1. Exams.MaxAttempts — số lượt tối đa. NULL = không giới hạn.
+  #      Giáo viên đặt lúc tạo đề.
+  #
+  #   2. ExamSubmissions.AttemptNumber + đổi UNIQUE thành
+  #      (ExamID, StudentID, AttemptNumber). Vẫn là chốt cuối ở tầng DB
+  #      chống double-click / nhiều tab sinh phiên trùng — chỉ khác là
+  #      giờ nó chống trùng TRONG MỘT LƯỢT thay vì chống mọi lượt thứ hai.
+  #
+  #   3. Exams.AllowReview — cho học sinh xem đáp án đúng + giải thích
+  #      sau khi nộp hay không. Mặc định bật, vì với đề ôn tập thì phần
+  #      giải thích chính là chỗ học sinh học được; giáo viên tắt nó khi
+  #      ra đề kiểm tra thật, hoặc khi đề còn đang mở cho lớp khác làm.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.2.0-01-exams-attempt-and-review-columns
+      author: team
+      comment: "Exams: MaxAttempts (NULL = không giới hạn), AllowReview (cho xem đáp án sau khi nộp)"
+      changes:
+        - addColumn:
+            tableName: Exams
+            columns:
+              - column:
+                  name: MaxAttempts
+                  type: INT
+                  remarks: "Số lượt làm tối đa cho mỗi học sinh. NULL = không giới hạn."
+              - column:
+                  name: AllowReview
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+                  remarks: "Cho học sinh xem đáp án đúng + giải thích sau khi nộp."
+
+  - changeSet:
+      id: v1.2.0-01-exams-backfill-maxattempts
+      author: team
+      comment: >-
+        Đề cũ không được đổi ý nghĩa sau migration, mà "ý nghĩa" của hai loại đề
+        vốn khác nhau: đề gắn với lớp là bài giáo viên giao — trước nay chỉ làm
+        được một lần, giữ nguyên MaxAttempts = 1. Đề luyện tập tự do thì để NULL
+        (không giới hạn), đúng mục đích của nó và đúng cả với kỳ vọng của học
+        sinh vốn đã thắc mắc vì sao không luyện lại được.
+      changes:
+        - update:
+            tableName: Exams
+            columns:
+              - column:
+                  name: MaxAttempts
+                  valueNumeric: 1
+            where: ClassID IS NOT NULL
+
+  - changeSet:
+      id: v1.2.0-01-examsubmissions-attempt-number
+      author: team
+      comment: >-
+        ExamSubmissions.AttemptNumber — lượt thứ mấy của học sinh trên đề này,
+        đếm từ 1. Không cần changeSet backfill riêng: cột NOT NULL DEFAULT 1 đã
+        điền 1 cho mọi dòng cũ, và ràng buộc UNIQUE(ExamID, StudentID) đang còn
+        hiệu lực ở bước này bảo đảm không dòng nào lẽ ra phải là lượt 2.
+      changes:
+        - addColumn:
+            tableName: ExamSubmissions
+            columns:
+              - column:
+                  name: AttemptNumber
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: v1.2.0-01-examsubmissions-attempt-lookup-index
+      author: team
+      comment: >-
+        Index tra lượt làm bài, PHẢI tạo trước khi bỏ ràng buộc UNIQUE cũ.
+
+        Hai lý do, một kỹ thuật và một hiệu năng:
+
+        1. Kỹ thuật — bảng này không có index riêng cho khoá ngoại fk_submission_exam;
+           index duy nhất bắt đầu bằng ExamID chính là uq_submission_exam_student.
+           Bỏ nó trước thì khoá ngoại mất chỗ dựa và MySQL từ chối lệnh DROP
+           (errno 150). Index này bắt đầu bằng ExamID nên thay thế được vai trò đó,
+           và changeSet sau mới drop được.
+
+        2. Hiệu năng — mọi request trong phòng thi đều bắt đầu bằng "lượt nào của
+           em này trên đề này": đếm số lượt đã dùng, và tìm phiên đang làm dở.
+           Có Status trong index thì truy vấn tìm phiên IN_PROGRESS không phải
+           đọc lại bảng.
+      changes:
+        - createIndex:
+            tableName: ExamSubmissions
+            indexName: idx_submission_exam_student_status
+            columns:
+              - column:
+                  name: ExamID
+              - column:
+                  name: StudentID
+              - column:
+                  name: Status
+
+  - changeSet:
+      id: v1.2.0-01-examsubmissions-unique-per-attempt
+      author: team
+      comment: >-
+        Thay UNIQUE(ExamID, StudentID) bằng UNIQUE(ExamID, StudentID, AttemptNumber).
+        Ràng buộc cũ chặn mọi lượt thứ hai; ràng buộc mới vẫn chặn hai phiên cùng
+        một lượt (double-click, hai tab) nhưng cho phép làm lại. Việc quyết định
+        học sinh CÒN được làm lại hay không chuyển lên tầng service, so số lượt đã
+        dùng với Exams.MaxAttempts.
+
+        Phụ thuộc vào changeSet ngay trên: khoá ngoại fk_submission_exam phải có
+        index khác đỡ trước khi ràng buộc này bị bỏ.
+      changes:
+        - dropUniqueConstraint:
+            tableName: ExamSubmissions
+            constraintName: uq_submission_exam_student
+        - addUniqueConstraint:
+            tableName: ExamSubmissions
+            columnNames: ExamID, StudentID, AttemptNumber
+            constraintName: uq_submission_exam_student_attempt

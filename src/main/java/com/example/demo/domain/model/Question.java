@@ -14,7 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * Câu hỏi "sống" trong ngân hàng câu hỏi — giáo viên được sửa tự do.
+ * Câu hỏi "sống" trong ngân hàng câu hỏi — người ra đề được sửa tự do.
  * Các đề thi đã phát hành không đọc bảng này mà đọc snapshot trong
  * {@link ExamQuestion} / {@link ExamQuestionAnswer}.
  */

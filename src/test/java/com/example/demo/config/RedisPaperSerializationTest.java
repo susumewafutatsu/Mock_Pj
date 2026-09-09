@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Bản đề thi có đi vào Redis rồi quay ra nguyên vẹn không.
  *
  * Test này tồn tại vì đây là chỗ hỏng âm thầm: cache ghi được nhưng đọc ra sai
- * kiểu thì lỗi chỉ nổ ở request thứ hai của học sinh, khi cache đã ấm — tức là
+ * kiểu thì lỗi chỉ nổ ở request thứ hai của thí sinh, khi cache đã ấm — tức là
  * đúng lúc đang thi thật chứ không phải lúc chạy thử.
  *
  * Ba thứ dễ vỡ được kiểm ở đây: LocalDateTime (cần JavaTimeModule),

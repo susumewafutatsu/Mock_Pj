@@ -1,0 +1,106 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # KHOÁ HỌC MẪU — context "demo".
+  #
+  # Khác v1.4.0/03 (từ vựng + chữ Hán, nạp cho mọi người): nội dung khoá
+  # học là do người ra đề soạn, nên một cài đặt thật bắt đầu với con số
+  # không khoá học và điều đó là đúng. File này chỉ để dev có sẵn thứ để
+  # bấm vào, và để thử được luồng duyệt.
+  #
+  # Có cả một khoá đã PUBLISHED (thí sinh học được ngay) lẫn một khoá
+  # PENDING (để hàng đợi duyệt của Admin không rỗng).
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.6.0-02-seed-demo-admin
+      author: team
+      context: demo
+      comment: >-
+        Tài khoản Admin mẫu. Mật khẩu: demo1234 — cùng hash với các tài khoản
+        demo khác ở v1.0.3. Bộ demo trước đó không có Admin nào, nên không thử
+        được luồng duyệt khoá học.
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Users WHERE UserID = 'demo-admin-01'
+      changes:
+        - insert:
+            tableName: Users
+            columns:
+              - column: { name: UserID, value: "demo-admin-01" }
+              - column: { name: full_name, value: "Quản trị viên (demo)" }
+              - column: { name: email, value: "admin@demo.local" }
+              - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
+              - column: { name: role, value: "ADMIN" }
+              - column: { name: auth_provider, value: "LOCAL" }
+      rollback:
+        - delete:
+            tableName: Users
+            where: UserID = 'demo-admin-01'
+
+  - changeSet:
+      id: v1.6.0-02-seed-course-n5-grammar
+      author: team
+      context: demo
+      comment: >-
+        Khoá ngữ pháp N5 đã xuất bản, 6 bài. Đây chính là loại nội dung mà thẻ
+        lật không diễn tả nổi — mỗi bài giải thích cấu trúc, cách nối và sắc
+        thái, thứ không nhét vào mặt sau một tấm thẻ được.
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Courses WHERE CourseID BETWEEN 9001 AND 9099
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM Users WHERE UserID = 'demo-teacher-01'
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Courses
+                (CourseID, Title, Description, LevelID, AuthorID, Status, ReviewedBy, ReviewedAt)
+              VALUES
+                (9001,
+                 'Ngữ pháp N5 — 6 mẫu câu nền tảng',
+                 'Sáu cấu trúc gặp nhiều nhất trong đề N5. Mỗi bài giải thích cách nối, sắc thái và lỗi người Việt hay mắc.',
+                 1, 'demo-teacher-01', 'PUBLISHED', 'demo-admin-01', NOW()),
+                (9002,
+                 'Chữ Hán N5 — nhóm thiên nhiên và thứ trong tuần',
+                 'Bảy chữ Hán cơ bản nhất, đọc theo mặt chữ chứ không phải lật thẻ.',
+                 1, 'demo-teacher-01', 'PENDING', NULL, NULL);
+
+              INSERT INTO CourseLessons
+                (CourseID, OrderNo, Title, LessonType, EstimatedMinutes, Content) VALUES
+                (9001, 1, 'これは〜です — Đây là ~', 'GRAMMAR', 8,
+                 'CẤU TRÚC\nDanh từ 1 は Danh từ 2 です。\n\nDùng để nói "A là B". です là phần đuôi lịch sự, bỏ nó đi câu vẫn đúng ngữ pháp nhưng thành lối nói thân mật.\n\nVÍ DỤ\nわたしは学生です。— Tôi là sinh viên.\nこれは本です。— Đây là quyển sách.\n\nPHỦ ĐỊNH\nDanh từ 2 じゃありません (thân mật hơn) hoặc ではありません (trang trọng).\nわたしは先生じゃありません。— Tôi không phải giáo viên.\n\nLỖI THƯỜNG GẶP\nNgười Việt hay bỏ quên は vì tiếng Việt không có trợ từ chủ đề. Không có は thì câu chỉ còn là hai danh từ đặt cạnh nhau, người nghe không biết đâu là chủ đề.'),
+
+                (9001, 2, 'は và が — hai trợ từ dễ lẫn nhất', 'GRAMMAR', 12,
+                 'は đánh dấu CHỦ ĐỀ — thứ đang được nói tới, người nghe đã biết.\nが đánh dấu CHỦ NGỮ — thông tin mới, thứ người nghe chưa biết.\n\nSO SÁNH\nわたしは学生です。— Còn tôi thì là sinh viên. (nói về tôi)\nだれが学生ですか。— Ai là sinh viên? (hỏi thông tin mới)\n→ Trả lời phải dùng が: わたしが学生です。\n\nMẸO NHỚ\nCâu hỏi có だれ/なに/どれ thì phần trả lời tương ứng dùng が, không dùng は. Lý do: cái chưa biết không thể là chủ đề đã biết.\n\nが CÒN DÙNG VỚI\n- Sở thích, khả năng: 日本語がわかります。\n- Tồn tại: 部屋に人がいます。'),
+
+                (9001, 3, '〜てもいいです — Xin phép', 'GRAMMAR', 8,
+                 'CẤU TRÚC\nĐộng từ thể て + もいいです。\n\nNghĩa: được phép làm gì. Dùng để XIN PHÉP khi ở dạng câu hỏi, và CHO PHÉP khi ở dạng câu kể.\n\nVÍ DỤ\nここに座ってもいいですか。— Tôi ngồi đây được không ạ?\n写真をとってもいいです。— Bạn chụp ảnh cũng được.\n\nTRẢ LỜI\nĐồng ý: はい、どうぞ。\nTừ chối: すみません、ちょっと…  (người Nhật hiếm khi từ chối thẳng bằng いいえ)\n\nPHÂN BIỆT\n〜てもかまいません cũng là "được phép", nhưng sắc thái là "tôi không bận tâm" — lạnh hơn, dùng khi người nói không thực sự quan tâm.'),
+
+                (9001, 4, '〜てはいけません — Cấm', 'GRAMMAR', 7,
+                 'CẤU TRÚC\nĐộng từ thể て + はいけません。\n\nNghĩa: không được phép. Đây là lời CẤM, mạnh hơn hẳn 〜ないでください (xin đừng).\n\nVÍ DỤ\nここでタバコを吸ってはいけません。— Không được hút thuốc ở đây.\n\nAI NÓI VỚI AI\nCâu này mang tính ra lệnh nên chỉ dùng từ trên xuống: thầy nói với trò, biển báo nói với người đọc, cha mẹ nói với con. Nói với cấp trên hoặc người lạ là bất lịch sự.\n\nCẶP ĐÔI VỚI BÀI TRƯỚC\n〜てもいいですか。→ はい、いいです。/ いいえ、〜てはいけません。'),
+
+                (9001, 5, '〜たいです — Muốn làm gì', 'GRAMMAR', 9,
+                 'CẤU TRÚC\nBỏ ます của động từ, thêm たいです。\n食べます → 食べたいです — muốn ăn\n行きます → 行きたいです — muốn đi\n\nĐIỂM QUAN TRỌNG\n〜たい chia như TÍNH TỪ đuôi い, không phải như động từ:\n  Phủ định: 食べたくないです\n  Quá khứ:  食べたかったです\n\nTRỢ TỪ ĐỔI ĐƯỢC\nを thường đổi thành が: 水が飲みたいです。Cả hai đều đúng, が nhấn mạnh vào thứ mình muốn hơn.\n\nCHỈ DÙNG CHO NGÔI THỨ NHẤT\nKhông nói 田中さんは行きたいです — bạn không biết được trong lòng người khác. Nói về người khác thì dùng 〜たがっています。'),
+
+                (9001, 6, '〜ことができます — Có thể', 'GRAMMAR', 8,
+                 'CẤU TRÚC\nĐộng từ thể từ điển + ことができます。\n\nNghĩa: có khả năng làm gì, hoặc hoàn cảnh cho phép làm gì.\n\nVÍ DỤ\n日本語を話すことができます。— Tôi nói được tiếng Nhật. (khả năng)\nここで払うことができます。— Có thể thanh toán ở đây. (hoàn cảnh)\n\nDẠNG NGẮN\nCó thể chia động từ sang thể khả năng: 話す → 話せます。Nghĩa giống nhau, dạng ことができます trang trọng hơn và dễ nhớ hơn với người mới vì không phải học thêm cách chia.\n\nDANH TỪ + ができます\nVới danh từ chỉ kỹ năng thì bỏ こと: 日本語ができます。');
+
+              INSERT INTO CourseLessons
+                (CourseID, OrderNo, Title, LessonType, EstimatedMinutes, Content) VALUES
+                (9002, 1, '日 月 火 水 — bốn chữ đầu', 'KANJI', 10,
+                 '日 — âm On: ニチ・ジツ | âm Kun: ひ・か | nghĩa: ngày, mặt trời | 4 nét\nHình mặt trời có một chấm ở giữa. Từ ghép: 日本 (Nhật Bản), 毎日 (hằng ngày), 日曜日 (chủ nhật).\n\n月 — ゲツ・ガツ | つき | tháng, mặt trăng | 4 nét\nHình vầng trăng khuyết. Từ ghép: 月曜日 (thứ hai), 一月 (tháng một), 今月 (tháng này).\n\n火 — カ | ひ | lửa | 4 nét\nNgọn lửa với hai tia bắn sang hai bên. Từ ghép: 火曜日 (thứ ba), 花火 (pháo hoa).\n\n水 — スイ | みず | nước | 4 nét\nDòng nước chảy toả ra hai bên. Từ ghép: 水曜日 (thứ tư), 水道 (nước máy).\n\nMẸO: bốn chữ này cùng với 木 金 土 tạo thành bảy thứ trong tuần. Học theo thứ tự thứ hai → chủ nhật thì nhớ nhanh hơn học rời từng chữ.'),
+
+                (9002, 2, '木 金 土 — ba chữ còn lại của tuần', 'KANJI', 10,
+                 '木 — モク・ボク | き | cây, gỗ | 4 nét\nCái cây có thân, cành và rễ. Từ ghép: 木曜日 (thứ năm), 木村 (họ Kimura).\n\n金 — キン・コン | かね | vàng, tiền, kim loại | 8 nét\nKim loại quý cất dưới mái nhà. Từ ghép: 金曜日 (thứ sáu), お金 (tiền).\n\n土 — ド・ト | つち | đất | 3 nét\nMầm cây nhú lên khỏi mặt đất. Từ ghép: 土曜日 (thứ bảy), 土地 (đất đai).\n\nĐỦ BẢY THỨ\n月火水木金土日 — thứ hai đến chủ nhật. Người Nhật đọc tắt bảy chữ này khi nói lịch, nên thuộc mặt chữ quan trọng hơn thuộc cách đọc rời.');
+      rollback:
+        - sql:
+            sql: DELETE FROM CourseLessons WHERE CourseID BETWEEN 9001 AND 9099
+        - sql:
+            sql: DELETE FROM Courses WHERE CourseID BETWEEN 9001 AND 9099

@@ -16,7 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Quản lý câu hỏi — chỉ giáo viên. Role đã được chặn ở SecurityConfig
+ * Quản lý câu hỏi — chỉ người ra đề. Role đã được chặn ở SecurityConfig
  * ({@code /api/teacher/** -> hasRole("TEACHER")}); quyền sở hữu ngân hàng câu
  * hỏi được kiểm tra thêm một lần nữa trong service.
  *

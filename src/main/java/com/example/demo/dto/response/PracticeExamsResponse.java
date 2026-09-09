@@ -26,9 +26,9 @@ public class PracticeExamsResponse {
     private Integer appliedSubjectId;
 
     /**
-     * true khi học sinh không tự chọn gì và server đã chọn hộ một trình độ (lấy
-     * theo lớp em đang học). Client cần biết để hiện "Đang xem theo trình độ của
-     * bạn — xem tất cả" thay vì để học sinh tưởng đây là toàn bộ đề.
+     * true khi thí sinh không tự chọn gì và server đã chọn hộ một trình độ (lấy
+     * theo phòng em đang tham gia). Client cần biết để hiện "Đang xem theo trình độ của
+     * bạn — xem tất cả" thay vì để thí sinh tưởng đây là toàn bộ đề.
      */
     private boolean filteredByEnrolledLevels;
 

@@ -4,7 +4,7 @@ import com.example.demo.dto.request.SaveAnswerRequest;
 import com.example.demo.dto.request.SubmitExamRequest;
 import com.example.demo.dto.response.AnswerSavedResponse;
 import com.example.demo.dto.response.ApiResponse;
-import com.example.demo.dto.response.ClassResponse;
+
 import com.example.demo.dto.response.ExamResponse;
 import com.example.demo.dto.response.ExamResultResponse;
 import com.example.demo.dto.response.ExamSessionResponse;
@@ -12,8 +12,7 @@ import com.example.demo.dto.response.HeartbeatResponse;
 import com.example.demo.dto.response.PracticeExamsResponse;
 import com.example.demo.dto.response.StudentExamBoardResponse;
 import com.example.demo.service.ExamService;
-import com.example.demo.service.StudentClassService;
-import com.example.demo.service.ExamService;
+
 import com.example.demo.service.SubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +30,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Phòng thi của học sinh.
+ * Phòng thi của thí sinh.
  *
  * Tìm đề — ba lối vào cho ba màn hình khác nhau:
- *   GET    /exams                   -> trang chủ: đề nhóm theo lớp + gợi ý đề luyện tập
- *   GET    /classes                 -> các lớp đang học
- *   GET    /classes/{id}/exams      -> toàn bộ đề của một lớp
+ *   GET    /exams                   -> trang chủ: đề nhóm theo phòng thi + gợi ý đề luyện tập
+ *   GET    /rooms/{id}/exams        -> toàn bộ đề của một phòng
+ *   (danh sách phòng đang tham gia nằm ở GET /api/rooms/joined)
  *   GET    /practice-exams          -> đề luyện tập tự do, kèm bộ lọc trình độ
  *
  * Thứ tự client gọi trong một phiên làm bài bình thường:
@@ -56,10 +55,10 @@ public class StudentController {
 
     private final SubmissionService submissionService;
     private final ExamService examService;
-    private final StudentClassService studentClassService;
+
 
     /**
-     * Trang chủ: đề của từng lớp (đã nhóm sẵn) cộng một phần gợi ý đề luyện tập.
+     * Trang chủ: đề của từng phòng thi (đã nhóm sẵn) cộng một phần gợi ý đề luyện tập.
      *
      * Bản trước trả một danh sách phẳng trộn cả hai loại đề — xem
      * {@link ExamService} để biết vì sao đã tách ra.
@@ -77,19 +76,19 @@ public class StudentController {
     }
 
     /**
-     * Toàn bộ đề của một lớp. Trả 404 nếu học sinh không học lớp đó — không tiết
-     * lộ lớp có tồn tại hay không cho người ngoài.
+     * Toàn bộ bài thi của một phòng. Trả 404 nếu thí sinh không ở trong phòng đó — không tiết
+     * lộ phòng có tồn tại hay không cho người ngoài.
      */
-    @GetMapping("/classes/{classId}/exams")
-    public ApiResponse<List<ExamResponse>> classExams(@PathVariable Integer classId,
-                                                      @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success(examService.getClassExams(classId, me.getUsername()));
+    @GetMapping("/rooms/{roomId}/exams")
+    public ApiResponse<List<ExamResponse>> roomExams(@PathVariable Integer roomId,
+                                                     @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(examService.getRoomExams(roomId, me.getUsername()));
     }
 
     /**
      * Một trang đề luyện tập tự do, kèm bộ lọc theo trình độ / môn học.
      *
-     * Không truyền bộ lọc thì server chọn hộ một trình độ theo lớp học sinh đang
+     * Không truyền bộ lọc thì server chọn hộ một trình độ theo phòng thí sinh đang
      * học và bật cờ {@code filteredByEnrolledLevels}, để client hiện được lối
      * thoát "xem tất cả trình độ".
      *
@@ -107,15 +106,9 @@ public class StudentController {
                 levelId, subjectId, allLevels, page, size, me.getUsername()));
     }
 
-    /**
-     * Danh sách lớp học mà học sinh đang đăng ký — cửa vào của
-     * {@code GET /classes/{classId}/exams}.
-     */
-    @GetMapping("/classes")
-    public ApiResponse<List<ClassResponse>> myClasses(@AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Lấy danh sách lớp học thành công",
-                studentClassService.getMyClasses(me.getUsername()));
-    }
+    // Danh sách phòng thí sinh đang tham gia nằm ở GET /api/rooms/joined —
+    // xem RoomController. Phòng thi là nơi hai vai gặp nhau nên nó có
+    // controller riêng, không nhân đôi thành hai bản gần giống nhau ở đây.
 
     public ApiResponse<List<ExamResponse>> exams(@AuthenticationPrincipal UserDetails me) {
         return ApiResponse.success(examService.getExamsForStudent(me.getUsername()));

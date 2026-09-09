@@ -17,54 +17,50 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
     List<Exam> findByCreatedByUserId(String teacherId);
 
     /**
-     * Đề của một tập lớp. KHÔNG kèm đề luyện tập tự do.
+     * Đề của một tập phòng thi. KHÔNG kèm đề công khai.
      *
-     * Trước đây chỗ này là một câu {@code where c is null or c.classId in (...)}
-     * trộn cả hai loại đề vào một danh sách phẳng, và phía trên không còn cách
-     * nào tách chúng ra ngoài việc đoán theo {@code className == null}. Hai loại
-     * đề trả lời hai câu hỏi khác nhau của học sinh — "cô giao bài gì?" và "tự
-     * ôn thì làm đề nào?" — nên giờ có hai câu truy vấn riêng.
+     * Trước đây đề gắn thẳng vào lớp qua {@code Exams.ClassID}, nên chỗ này chỉ
+     * cần lọc theo cột đó. Giờ quan hệ đi qua {@link com.example.demo.domain.model.RoomExam},
+     * nên phải join — đổi lại, một đề dùng được ở nhiều phòng.
      *
-     * {@code join fetch} để lấy luôn lớp / môn / trình độ / giáo viên trong một
-     * câu truy vấn — danh sách đề cần mấy tên đó để hiển thị, không fetch sẵn
-     * thì mỗi dòng lại thêm mấy query lazy.
+     * {@code distinct} là bắt buộc: cùng một đề gắn vào hai phòng mà thí sinh
+     * đều là thành viên sẽ ra hai dòng giống hệt nhau.
      *
      * Người gọi phải tự chặn danh sách rỗng: {@code in ()} là SQL không hợp lệ
      * trên một số DB.
      */
     @Query("""
-            select e from Exam e
-            join fetch e.classEntity c
+            select distinct e from Exam e
+            join RoomExam re on re.id.examId = e.examId
             left join fetch e.level l
             left join fetch l.subject
             left join fetch e.createdBy
-            where c.classId in :classIds
+            where re.id.roomId in :roomIds
             """)
-    List<Exam> findByClassIdIn(@Param("classIds") Collection<Integer> classIds);
+    List<Exam> findByRoomIdIn(@Param("roomIds") Collection<Integer> roomIds);
 
     /**
-     * Đề luyện tập tự do (ClassID null), lọc tuỳ chọn theo trình độ và môn học,
-     * có phân trang.
+     * Đề công khai, lọc tuỳ chọn theo trình độ và môn học, có phân trang.
      *
-     * Truyền null cho tham số nào thì tham số đó không lọc — học sinh tự chọn
-     * bộ lọc. Trước đây danh sách này đổ về TOÀN BỘ đề tự do trong hệ thống
-     * trong một lần gọi, nên một em đang học N5 vẫn thấy đề luyện N1 của một
-     * giáo viên hoàn toàn xa lạ, và response chỉ nặng thêm mãi theo thời gian.
+     * Truyền null cho tham số nào thì tham số đó không lọc — thí sinh tự chọn
+     * bộ lọc. Danh sách này trước đây đổ về TOÀN BỘ đề tự do trong hệ thống
+     * trong một lần gọi, nên một người đang học N5 vẫn thấy đề luyện N1 của
+     * một người ra đề hoàn toàn xa lạ, và response chỉ nặng thêm mãi.
+     *
+     * Điều kiện {@code e.isPublic = true} thay cho {@code e.classEntity is null}
+     * cũ — xem chú thích ở {@link Exam#getIsPublic()} về việc vì sao quy ước
+     * ngầm đó phải được nói thành lời.
      *
      * {@code countQuery} viết tay và KHÔNG có {@code fetch}: Spring Data tự suy
      * câu đếm từ câu chính sẽ kéo theo cả mấy mệnh đề fetch, vốn không hợp lệ
      * trong một câu {@code count}.
-     *
-     * Các {@code join fetch} ở đây đều là quan hệ ToOne nên không nhân dòng,
-     * {@code limit} vẫn được đẩy xuống SQL. (Fetch một collection thì Hibernate
-     * sẽ phải phân trang trong bộ nhớ — chỗ này không rơi vào trường hợp đó.)
      */
     @Query(value = """
             select e from Exam e
             left join fetch e.level l
             left join fetch l.subject s
             left join fetch e.createdBy
-            where e.classEntity is null
+            where e.isPublic = true
               and (:levelId is null or l.levelId = :levelId)
               and (:subjectId is null or s.subjectId = :subjectId)
             """,
@@ -72,7 +68,7 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
             select count(e) from Exam e
             left join e.level l
             left join l.subject s
-            where e.classEntity is null
+            where e.isPublic = true
               and (:levelId is null or l.levelId = :levelId)
               and (:subjectId is null or s.subjectId = :subjectId)
             """)
@@ -81,8 +77,8 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
                                  Pageable pageable);
 
     /**
-     * Đề luyện tập tự do thuộc một tập trình độ — dùng cho phần gợi ý ở trang
-     * tổng hợp, nơi bộ lọc mặc định là các trình độ học sinh đang học.
+     * Đề công khai thuộc một tập trình độ — dùng cho phần gợi ý ở trang tổng
+     * hợp, nơi bộ lọc mặc định là các trình độ thí sinh đang theo.
      *
      * Người gọi phải tự chặn danh sách rỗng.
      */
@@ -91,15 +87,15 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
             join fetch e.level l
             left join fetch l.subject
             left join fetch e.createdBy
-            where e.classEntity is null and l.levelId in :levelIds
+            where e.isPublic = true and l.levelId in :levelIds
             """)
     List<Exam> findPracticeExamsByLevelIdIn(@Param("levelIds") Collection<Integer> levelIds);
 
     /**
-     * Các trình độ thực sự CÓ đề luyện tập, kèm số lượng.
+     * Các trình độ thực sự CÓ đề công khai, kèm số lượng.
      *
      * Bộ lọc được dựng từ đây chứ không phải từ toàn bộ danh mục trình độ, để
-     * học sinh không bấm phải một lựa chọn rồi nhận về danh sách rỗng.
+     * thí sinh không bấm phải một lựa chọn rồi nhận về danh sách rỗng.
      */
     @Query("""
             select l.levelId as levelId, l.levelName as levelName,
@@ -108,7 +104,7 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
             from Exam e
             join e.level l
             join l.subject s
-            where e.classEntity is null
+            where e.isPublic = true
             group by l.levelId, l.levelName, s.subjectId, s.subjectName, l.displayOrder
             order by s.subjectName asc, l.displayOrder asc
             """)
@@ -128,8 +124,9 @@ public interface ExamRepository extends JpaRepository<Exam, Integer> {
      *
      * Không có khoá này, hai request /start gần như cùng lúc (double-click, hai
      * tab) đều thấy "chưa có phiên" rồi cùng insert; một trong hai sẽ chết vì
-     * UNIQUE(ExamID, StudentID) và học sinh nhìn thấy lỗi. Khoá xong thì request
-     * thứ hai đọc được phiên vừa commit và chuyển sang luồng "tiếp tục làm bài".
+     * UNIQUE(ExamID, StudentID, AttemptNumber) và thí sinh nhìn thấy lỗi. Khoá
+     * xong thì request thứ hai đọc được phiên vừa commit và chuyển sang luồng
+     * "tiếp tục làm bài".
      *
      * Chỉ dùng ở nhánh tạo mới; nhánh tiếp tục làm bài không chạm tới khoá.
      */

@@ -1,0 +1,140 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # CHUYỂN DỮ LIỆU LỚP → PHÒNG THI
+  #
+  # File này KHÔNG xoá gì cả. Sau khi chạy xong, Classes và ClassStudents
+  # vẫn còn nguyên và vẫn đọc được — đó là điều kiện để còn đường lùi nếu
+  # phát hiện sai sót. Việc xoá nằm ở file 03, chạy sau khi đã kiểm.
+  #
+  # Ánh xạ:
+  #   Classes        -> Rooms       (Capacity NULL = giữ nguyên tinh thần
+  #                                  lớp cũ: không giới hạn sĩ số)
+  #   ClassStudents  -> RoomMembers (SeatNo cấp theo thứ tự JoinedAt)
+  #   Exams.ClassID  -> RoomExams   (mỗi đề của lớp thành một dòng)
+  #   Exams.ClassID IS NULL -> IsPublic = TRUE  (đề luyện tập tự do cũ)
+  #
+  # RoomID cố ý lấy đúng ClassID cũ: mọi log, ảnh chụp màn hình và đường
+  # dẫn cũ còn đối chiếu được, và nếu phải lùi thì hai bên vẫn khớp số.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.5.0-02-migrate-classes-to-rooms
+      author: team
+      comment: "Mỗi lớp cũ thành một phòng thi, giữ nguyên ID."
+      preConditions:
+        - onFail: MARK_RAN
+        # Chỉ chạy khi bảng Classes còn tồn tại (DB mới toanh thì không có gì
+        # để chuyển) và Rooms còn trống (tránh chạy đè lần hai).
+        - tableExists:
+            tableName: Classes
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Rooms
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Rooms
+                (RoomID, Name, Code, OwnerID, LevelID, Capacity, JoinPolicy, Status, CreatedAt)
+              SELECT
+                c.ClassID,
+                c.ClassName,
+                -- Mã phòng: dùng lại CourseCode nếu có, không thì sinh từ ClassID.
+                -- Tiền tố R- để không đụng mã do người dùng tự đặt về sau.
+                COALESCE(NULLIF(c.CourseCode, ''), CONCAT('R-', LPAD(c.ClassID, 6, '0'))),
+                c.TeacherID,
+                c.LevelID,
+                -- Lớp cũ không có khái niệm sức chứa, nên giữ nguyên: không giới hạn.
+                NULL,
+                -- Lớp cũ là danh sách đóng do giáo viên thêm tay; CODE là thứ
+                -- gần nhất với tinh thần đó trong mô hình mới.
+                'CODE',
+                'OPEN',
+                c.CreatedAt
+              FROM Classes c;
+      rollback:
+        - sql:
+            sql: DELETE FROM Rooms
+
+  - changeSet:
+      id: v1.5.0-02-migrate-class-students
+      author: team
+      comment: >-
+        Học sinh trong lớp thành thành viên phòng. SeatNo cấp theo thứ tự
+        JoinedAt để ai vào lớp trước giữ ghế nhỏ hơn, đúng ngữ nghĩa "ai
+        nhanh thì vào" của mô hình mới.
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: ClassStudents
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM RoomMembers
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO RoomMembers (RoomID, UserID, SeatNo, Status, JoinedAt)
+              SELECT
+                cs.ClassID,
+                cs.StudentID,
+                ROW_NUMBER() OVER (PARTITION BY cs.ClassID ORDER BY cs.JoinedAt, cs.StudentID),
+                'ACTIVE',
+                cs.JoinedAt
+              FROM ClassStudents cs
+              -- Chỉ chuyển những dòng trỏ tới lớp đã thành phòng ở changeSet trên.
+              WHERE EXISTS (SELECT 1 FROM Rooms r WHERE r.RoomID = cs.ClassID);
+      rollback:
+        - sql:
+            sql: DELETE FROM RoomMembers
+
+  - changeSet:
+      id: v1.5.0-02-migrate-exam-class-links
+      author: team
+      comment: "Mỗi đề đang gắn lớp thành một dòng RoomExams."
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: Exams
+            columnName: ClassID
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM RoomExams
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO RoomExams (RoomID, ExamID, OrderNo, AttachedAt)
+              SELECT
+                e.ClassID,
+                e.ExamID,
+                ROW_NUMBER() OVER (PARTITION BY e.ClassID ORDER BY e.CreatedAt, e.ExamID),
+                e.CreatedAt
+              FROM Exams e
+              WHERE e.ClassID IS NOT NULL
+                AND EXISTS (SELECT 1 FROM Rooms r WHERE r.RoomID = e.ClassID);
+      rollback:
+        - sql:
+            sql: DELETE FROM RoomExams
+
+  - changeSet:
+      id: v1.5.0-02-mark-public-exams
+      author: team
+      comment: >-
+        Đề không gắn lớp nào chính là đề luyện tập tự do cũ — đánh dấu công
+        khai để quy ước ngầm "ClassID IS NULL" được nói thành lời trước khi
+        cột đó bị xoá.
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: Exams
+            columnName: ClassID
+      changes:
+        - sql:
+            sql: UPDATE Exams SET IsPublic = TRUE WHERE ClassID IS NULL
+      rollback:
+        - sql:
+            sql: UPDATE Exams SET IsPublic = FALSE

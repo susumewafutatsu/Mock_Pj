@@ -1,6 +1,6 @@
 package com.example.demo.service.impl;
 
-import com.example.demo.domain.model.ClassEntity;
+
 import com.example.demo.domain.model.Exam;
 import com.example.demo.domain.model.SubjectLevel;
 import com.example.demo.domain.model.User;
@@ -8,8 +8,8 @@ import com.example.demo.dto.request.ExamCreateRequest;
 import com.example.demo.dto.response.TeacherExamResponse;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
-import com.example.demo.repository.ClassRepository;
-import com.example.demo.repository.ClassStudentRepository;
+import com.example.demo.repository.RoomExamRepository;
+import com.example.demo.repository.RoomMemberRepository;
 import com.example.demo.repository.ExamQuestionRepository;
 import com.example.demo.repository.ExamRepository;
 import com.example.demo.repository.ExamSubmissionRepository;
@@ -34,8 +34,8 @@ public class TeacherExamServiceImpl implements TeacherExamService {
     private final ExamRepository examRepository;
     private final ExamQuestionRepository examQuestionRepository;
     private final ExamSubmissionRepository submissionRepository;
-    private final ClassRepository classRepository;
-    private final ClassStudentRepository classStudentRepository;
+    private final RoomExamRepository roomExamRepository;
+    private final RoomMemberRepository roomMemberRepository;
     private final SubjectLevelRepository subjectLevelRepository;
     private final UserRepository userRepository;
     private final ExamRedisService examRedis;
@@ -60,13 +60,17 @@ public class TeacherExamServiceImpl implements TeacherExamService {
 
         Exam exam = Exam.builder()
                 .title(request.getTitle().trim())
-                .classEntity(resolveOwnedClassOrNull(teacher, request.getClassId()))
+                .isPublic(Boolean.TRUE.equals(request.getIsPublic()))
                 .level(resolveLevel(request.getLevelId()))
                 .createdBy(teacher)
                 .durationMinutes(request.getDurationMinutes())
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .isAdaptive(Boolean.TRUE.equals(request.getAdaptive()))
+                .maxAttempts(request.getMaxAttempts())
+                // Không dùng Boolean.TRUE.equals: bỏ trống trường này phải giữ
+                // mặc định "cho xem", chứ không thành "cấm xem".
+                .allowReview(request.getAllowReview() == null || request.getAllowReview())
                 .build();
 
         return toResponse(examRepository.save(exam), LocalDateTime.now());
@@ -80,16 +84,18 @@ public class TeacherExamServiceImpl implements TeacherExamService {
         requireValidWindow(request);
 
         if (submissionRepository.existsByExamExamId(examId)) {
-            throw new BusinessException("Đề đã có học sinh làm bài, không thể sửa");
+            throw new BusinessException("Đề đã có thí sinh làm bài, không thể sửa");
         }
 
         exam.setTitle(request.getTitle().trim());
-        exam.setClassEntity(resolveOwnedClassOrNull(teacher, request.getClassId()));
+        exam.setIsPublic(Boolean.TRUE.equals(request.getIsPublic()));
         exam.setLevel(resolveLevel(request.getLevelId()));
         exam.setDurationMinutes(request.getDurationMinutes());
         exam.setStartTime(request.getStartTime());
         exam.setEndTime(request.getEndTime());
         exam.setIsAdaptive(Boolean.TRUE.equals(request.getAdaptive()));
+        exam.setMaxAttempts(request.getMaxAttempts());
+        exam.setAllowReview(request.getAllowReview() == null || request.getAllowReview());
 
         // Sửa đề là bản cache trong Redis hết đúng. Xoá sau commit để không có
         // request nào kịp nạp lại cache từ dữ liệu cũ chưa commit.
@@ -104,7 +110,7 @@ public class TeacherExamServiceImpl implements TeacherExamService {
         Exam exam = requireOwnedExam(teacher, examId);
 
         if (submissionRepository.existsByExamExamId(examId)) {
-            throw new BusinessException("Đề đã có học sinh làm bài, không thể xóa");
+            throw new BusinessException("Đề đã có thí sinh làm bài, không thể xóa");
         }
 
         // ExamQuestions (và ExamQuestionAnswers theo sau) có FK ON DELETE CASCADE
@@ -148,19 +154,6 @@ public class TeacherExamServiceImpl implements TeacherExamService {
         return exam;
     }
 
-    /** classId để trống = đề luyện tập tự do. Có thì phải là lớp của chính giáo viên. */
-    private ClassEntity resolveOwnedClassOrNull(User teacher, Integer classId) {
-        if (classId == null) {
-            return null;
-        }
-        ClassEntity cls = classRepository.findById(classId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lớp học id=" + classId));
-        if (!cls.getTeacher().getUserId().equals(teacher.getUserId())) {
-            throw new BusinessException("Bạn không phụ trách lớp học này");
-        }
-        return cls;
-    }
-
     private SubjectLevel resolveLevel(Integer levelId) {
         return subjectLevelRepository.findById(levelId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy trình độ id=" + levelId));
@@ -174,7 +167,9 @@ public class TeacherExamServiceImpl implements TeacherExamService {
 
     private TeacherExamResponse toResponse(Exam exam, LocalDateTime now) {
         int totalQuestions = (int) examQuestionRepository.countByExam_ExamId(exam.getExamId());
-        ClassEntity cls = exam.getClassEntity();
+        // Một đề gắn được vào nhiều phòng, nên ở đây phải đếm chứ không đọc
+        // được một cột như thời còn ClassID.
+        List<Integer> roomIds = roomExamRepository.findRoomIdsByExamId(exam.getExamId());
         SubjectLevel level = exam.getLevel();
 
         return TeacherExamResponse.builder()
@@ -184,16 +179,21 @@ public class TeacherExamServiceImpl implements TeacherExamService {
                 .startTime(exam.getStartTime())
                 .endTime(exam.getEndTime())
                 .adaptive(Boolean.TRUE.equals(exam.getIsAdaptive()))
-                .classId(cls != null ? cls.getClassId() : null)
-                .className(cls != null ? cls.getClassName() : null)
+                .maxAttempts(exam.getMaxAttempts())
+                .allowReview(Boolean.TRUE.equals(exam.getAllowReview()))
+                .isPublic(Boolean.TRUE.equals(exam.getIsPublic()))
+                .roomCount(roomIds.size())
                 .levelId(level != null ? level.getLevelId() : null)
                 .levelName(level != null ? level.getLevelName() : null)
                 .subjectName(level != null && level.getSubject() != null
                         ? level.getSubject().getSubjectName() : null)
                 .totalQuestions(totalQuestions)
                 .submissionCount(submissionRepository.countByExamExamId(exam.getExamId()))
-                .totalStudents(cls != null
-                        ? classStudentRepository.countByClassEntity_ClassId(cls.getClassId()) : 0)
+                // Cộng sĩ số của mọi phòng có chứa đề này. Đề công khai thì con
+                // số này là 0 và đúng là 0: nó không hướng tới một nhóm nào cả.
+                .totalCandidates(roomIds.isEmpty() ? 0L
+                        : roomMemberRepository.countActiveByRoomIdIn(roomIds).stream()
+                                .mapToLong(RoomMemberRepository.RoomHeadcount::getTotal).sum())
                 .status(resolveStatus(exam, totalQuestions, now))
                 .createdAt(exam.getCreatedAt())
                 .serverTime(now)

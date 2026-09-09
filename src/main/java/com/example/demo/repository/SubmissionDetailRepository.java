@@ -14,7 +14,7 @@ public interface SubmissionDetailRepository extends JpaRepository<SubmissionDeta
 
     long countBySubmission_SubmissionIdAndIsCorrect(Integer submissionId, boolean isCorrect);
 
-    /** Câu hỏi này đã có học sinh trả lời chưa. */
+    /** Câu hỏi này đã có thí sinh trả lời chưa. */
     boolean existsByQuestion_QuestionId(Integer questionId);
 
     /** Dòng cần upsert khi autosave: một câu hỏi chỉ có một dòng trong một bài làm. */

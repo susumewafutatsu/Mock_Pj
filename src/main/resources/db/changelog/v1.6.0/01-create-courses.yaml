@@ -1,0 +1,272 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # KHOÁ HỌC — revision_plan.md §3.4(c)
+  #
+  # Cố ý ĐƠN GIẢN. Một khoá học là danh sách bài học có thứ tự; một bài
+  # học là một khối lý thuyết để đọc. Đọc xong bấm Hoàn thành, tiến độ
+  # tính bằng số bài xong chia tổng số bài. Không có khối nội dung ghép,
+  # không đo thời gian đọc, không có trạng thái "đang đọc dở".
+  #
+  # Vì sao có bảng này khi đã có bộ thẻ (v1.4.0): thẻ lật chỉ hợp với từ
+  # vựng. Ngữ pháp cần một trang giải thích cấu trúc, cách nối và sắc
+  # thái; chữ Hán cần mặt chữ, âm On/Kun, bộ thủ và từ ghép. Cả hai thứ
+  # đó không nhét vào mặt sau một tấm thẻ được.
+  #
+  # Quyền: người ra đề soạn (DRAFT) → gửi duyệt (PENDING) → Admin duyệt
+  # (PUBLISHED) hoặc từ chối (REJECTED). Xem CourseStatus.java.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.6.0-01-create-courses
+      author: team
+      comment: "Khoá học: người ra đề soạn, Admin duyệt rồi mới xuất bản."
+      changes:
+        - createTable:
+            tableName: Courses
+            columns:
+              - column:
+                  name: CourseID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: Title
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Description
+                  type: VARCHAR(500)
+              - column:
+                  name: LevelID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_course_level
+                    references: SubjectLevels(LevelID)
+              # Tác giả. Không cho xoá tài khoản kéo theo mất khoá học của họ:
+              # khoá đã xuất bản là thứ nhiều người đang học dở.
+              - column:
+                  name: AuthorID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_course_author
+                    references: Users(UserID)
+              - column:
+                  name: Status
+                  type: VARCHAR(20)
+                  defaultValue: DRAFT
+                  constraints:
+                    nullable: false
+              # Ai duyệt, lúc nào, và vì sao từ chối. Ghi lại để tác giả biết
+              # phải sửa gì, và để về sau còn truy được ai đã cho qua nội dung nào.
+              - column:
+                  name: ReviewedBy
+                  type: VARCHAR(50)
+                  constraints:
+                    foreignKeyName: fk_course_reviewer
+                    references: Users(UserID)
+              - column:
+                  name: ReviewedAt
+                  type: DATETIME
+              - column:
+                  name: ReviewNote
+                  type: VARCHAR(500)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: UpdatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        # "Khoá của tôi" bên người ra đề
+        - createIndex:
+            tableName: Courses
+            indexName: idx_course_author
+            columns:
+              - column:
+                  name: AuthorID
+
+        # Hai truy vấn nóng: hàng đợi duyệt của Admin (status = PENDING) và
+        # danh sách khoá cho thí sinh (status = PUBLISHED, lọc theo trình độ).
+        - createIndex:
+            tableName: Courses
+            indexName: idx_course_status_level
+            columns:
+              - column:
+                  name: Status
+              - column:
+                  name: LevelID
+
+  - changeSet:
+      id: v1.6.0-01-create-course-lessons
+      author: team
+      comment: >-
+        Bài học. Content là MỘT khối văn bản chứ không phải nhiều khối ghép —
+        bản kế hoạch trước có sáu loại khối, kéo theo một trình soạn thảo khối
+        vốn là phần tốn công nhất mà giá trị thêm thì nhỏ.
+      changes:
+        - createTable:
+            tableName: CourseLessons
+            columns:
+              - column:
+                  name: LessonID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: CourseID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_lesson_course
+                    references: Courses(CourseID)
+                    deleteCascade: true
+              - column:
+                  name: OrderNo
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Title
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              # GRAMMAR | KANJI | VOCAB | READING | LISTENING — quyết định cách
+              # hiển thị, không phải nhãn trang trí. Xem LessonType.java.
+              - column:
+                  name: LessonType
+                  type: VARCHAR(20)
+                  defaultValue: GRAMMAR
+                  constraints:
+                    nullable: false
+              # Lý thuyết để đọc. LONGTEXT vì một bài ngữ pháp tử tế có cấu trúc,
+              # cách nối, sắc thái, vài câu ví dụ và phần lỗi thường gặp.
+              - column:
+                  name: Content
+                  type: LONGTEXT
+              - column:
+                  name: EstimatedMinutes
+                  type: INT
+              # Bộ thẻ ôn kèm. ĐỂ TRỐNG ĐƯỢC: bài ngữ pháp thường chẳng cần thẻ
+              # nào, còn bài từ vựng thì gắn để ôn lại sau khi đọc. Bộ thẻ là
+              # công cụ ôn, không phải thứ thay cho bài học.
+              - column:
+                  name: DeckID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_lesson_deck
+                    references: Decks(DeckID)
+              # Bài kiểm tra cuối bài, cũng không bắt buộc.
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_lesson_exam
+                    references: Exams(ExamID)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - createIndex:
+            tableName: CourseLessons
+            indexName: idx_lesson_course_order
+            columns:
+              - column:
+                  name: CourseID
+              - column:
+                  name: OrderNo
+
+  - changeSet:
+      id: v1.6.0-01-create-enrollments
+      author: team
+      comment: >-
+        Ghi danh khoá học. Có bảng riêng chứ không suy từ tiến độ, để khoá vừa
+        ghi danh mà chưa học bài nào vẫn hiện ở "khoá của tôi" với 0%.
+      changes:
+        - createTable:
+            tableName: CourseEnrollments
+            columns:
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_enroll_user
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: CourseID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_enroll_course
+                    references: Courses(CourseID)
+                    deleteCascade: true
+              - column:
+                  name: StartedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addPrimaryKey:
+            tableName: CourseEnrollments
+            columnNames: UserID, CourseID
+            constraintName: PK_CourseEnrollments
+
+        - createIndex:
+            tableName: CourseEnrollments
+            indexName: idx_enroll_course
+            columns:
+              - column:
+                  name: CourseID
+
+  - changeSet:
+      id: v1.6.0-01-create-lesson-done
+      author: team
+      comment: >-
+        Bài đã hoàn thành. Chỉ có mốc hoàn thành, không có "đang đọc dở" —
+        tiến độ là số bài xong chia tổng số bài, đúng như yêu cầu.
+      changes:
+        - createTable:
+            tableName: LessonCompletions
+            columns:
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_lessondone_user
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: LessonID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_lessondone_lesson
+                    references: CourseLessons(LessonID)
+                    deleteCascade: true
+              - column:
+                  name: CompletedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addPrimaryKey:
+            tableName: LessonCompletions
+            columnNames: UserID, LessonID
+            constraintName: PK_LessonCompletions
+
+        - createIndex:
+            tableName: LessonCompletions
+            indexName: idx_lessondone_lesson
+            columns:
+              - column:
+                  name: LessonID

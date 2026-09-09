@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 /**
- * Trình độ của một môn học — dùng cho các dropdown "Trình độ" ở form tạo lớp,
+ * Trình độ của một môn học — dùng cho các dropdown "Trình độ" ở form tạo phòng thi,
  * tạo ngân hàng câu hỏi, tạo đề thi.
  */
 @Data

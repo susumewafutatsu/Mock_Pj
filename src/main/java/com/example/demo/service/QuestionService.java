@@ -14,11 +14,11 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 /**
- * Quản lý câu hỏi trong ngân hàng — nghiệp vụ của giáo viên.
+ * Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề.
  *
  * Mọi phương thức nhận {@code teacherEmail} (lấy từ token) và tự kiểm tra
- * quyền sở hữu ngân hàng câu hỏi: chỉ role TEACHER là chưa đủ, giáo viên A
- * không được chạm vào ngân hàng của giáo viên B.
+ * quyền sở hữu ngân hàng câu hỏi: chỉ role TEACHER là chưa đủ, người ra đề A
+ * không được chạm vào ngân hàng của người ra đề B.
  */
 public interface QuestionService {
 

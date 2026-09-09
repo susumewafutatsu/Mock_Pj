@@ -75,7 +75,7 @@ const CLASSES = [
 const NOTIFICATIONS = [
   { channel: "EMAIL", subject: "Nhắc lịch thi Giữa kỳ - Toán 9A", status: "Đã gửi", time: "15/08 09:12" },
   { channel: "ZALO", subject: "Kết quả bài kiểm tra Kanji đã có", status: "Đã gửi", time: "15/08 20:45" },
-  { channel: "AWS_SNS", subject: "Cảnh báo học sinh nguy cơ yếu - Trần Thị B", status: "Đang xử lý", time: "16/08 07:30" },
+  { channel: "AWS_SNS", subject: "Cảnh báo thí sinh nguy cơ yếu - Trần Thị B", status: "Đang xử lý", time: "16/08 07:30" },
   { channel: "EMAIL", subject: "Đồng bộ điểm lên Google Classroom thất bại", status: "Lỗi", time: "16/08 08:02" },
 ];
 
@@ -155,15 +155,15 @@ function Overview() {
     <div>
       <SectionHeading eyebrow="Trang 01 · Sổ cái hệ thống" title="Tổng quan hệ thống" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
-        <StatCard label="Giáo viên" value="12" sub="+2 tháng này" />
-        <StatCard label="Học sinh" value="248" sub="+18 tháng này" />
+        <StatCard label="Người ra đề" value="12" sub="+2 tháng này" />
+        <StatCard label="Thí sinh" value="248" sub="+18 tháng này" />
         <StatCard label="Lớp học" value={CLASSES.length} sub="4 môn học" />
         <StatCard label="Đề thi đang mở" value="1" sub="24 đề đã tạo" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 18 }}>
         <div className="gb-card" style={{ padding: "20px 22px" }}>
-          <p style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, margin: "0 0 4px" }}>Học sinh đăng ký mới</p>
+          <p style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, margin: "0 0 4px" }}>Thí sinh đăng ký mới</p>
           <p style={{ fontSize: 12.5, color: "var(--text-soft)", margin: "0 0 20px" }}>7 ngày gần nhất</p>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 14, height: 120 }}>
             {WEEKLY_SIGNUPS.map((v, i) => (
@@ -177,7 +177,7 @@ function Overview() {
             {[
               { text: "Thầy Huy đã tạo đề \u201cGiữa kỳ - Đại số chương 3\u201d", time: "2 giờ trước" },
               { text: "Cô Mai đồng bộ điểm lớp IELTS Foundation B1 thất bại", time: "5 giờ trước" },
-              { text: "AI phát hiện 2 học sinh có nguy cơ học lực yếu ở lớp N4", time: "hôm qua" },
+              { text: "AI phát hiện 2 thí sinh có nguy cơ học lực yếu ở lớp N4", time: "hôm qua" },
             ].map((a, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0" }}>
                 <p style={{ margin: 0, fontSize: 13.5 }}>{a.text}</p>
@@ -238,7 +238,7 @@ function Orgs() {
       <SectionHeading eyebrow="Trang 03 · Sổ đăng ký" title="Người dùng & lớp học" />
       <div className="gb-card" style={{ overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 1fr 1fr", padding: "12px 20px", borderBottom: "1px solid var(--border-soft)", fontSize: 12, color: "var(--text-soft)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          <span>Lớp học</span><span>Môn / Trình độ</span><span>Giáo viên</span><span>Sĩ số</span><span>Đồng bộ</span>
+          <span>Lớp học</span><span>Môn / Trình độ</span><span>Người ra đề</span><span>Sĩ số</span><span>Đồng bộ</span>
         </div>
         {CLASSES.map((c, i) => (
           <div key={c.id} className="gb-row" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 1fr 1fr", padding: "14px 20px", alignItems: "center", borderBottom: i < CLASSES.length - 1 ? "1px solid var(--border-soft)" : "none", fontSize: 13.5 }}>
@@ -304,7 +304,7 @@ export default function AdminApp() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "8px 12px" }}>
             <Search size={14} color="#AEB6C0" />
-            <span style={{ fontSize: 12.5, color: "#AEB6C0" }}>Tìm lớp, học sinh, đề thi...</span>
+            <span style={{ fontSize: 12.5, color: "#AEB6C0" }}>Tìm lớp, thí sinh, đề thi...</span>
           </div>
           <div style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--seal-soft)", color: "var(--seal)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 12.5 }}>AD</div>
         </div>

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 /**
  * Trả lời cho nhịp heartbeat 15-30 giây của client.
  *
- * Mục đích duy nhất là cập nhật LastActiveAt để phát hiện học sinh rớt mạng.
+ * Mục đích duy nhất là cập nhật LastActiveAt để phát hiện thí sinh rớt mạng.
  * Nó KHÔNG gia hạn thêm giờ làm bài: {@code expiresAt} trả về đây luôn là mốc
  * đã chốt lúc bắt đầu thi.
  */
@@ -23,7 +23,7 @@ public class HeartbeatResponse {
     private LocalDateTime expiresAt;
     private long remainingSeconds;
 
-    /** Trước nhịp này server đang coi học sinh là mất kết nối. */
+    /** Trước nhịp này server đang coi thí sinh là mất kết nối. */
     private boolean recoveredFromAtRisk;
 
     /**

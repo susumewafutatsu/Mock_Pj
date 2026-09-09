@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
  * Liên kết đề thi - câu hỏi, đồng thời là bản đóng băng (snapshot) của câu hỏi
  * tại thời điểm được đưa vào đề.
  *
- * Đề thi KHÔNG đọc nội dung từ {@link Question} nữa. Nhờ vậy giáo viên sửa câu
+ * Đề thi KHÔNG đọc nội dung từ {@link Question} nữa. Nhờ vậy người ra đề sửa câu
  * hỏi trong ngân hàng bao nhiêu lần cũng không làm sai lệch bài đã nộp.
  * Quan hệ tới {@code question} chỉ còn để truy vết nguồn gốc và thống kê.
  */
@@ -80,7 +80,7 @@ public class ExamQuestion {
         this.snapshotAt = LocalDateTime.now();
     }
 
-    /** Nội dung hiển thị cho học sinh: ưu tiên snapshot, fallback câu hỏi gốc. */
+    /** Nội dung hiển thị cho thí sinh: ưu tiên snapshot, fallback câu hỏi gốc. */
     public String resolveContent() {
         return questionContent != null ? questionContent : question.getContent();
     }
