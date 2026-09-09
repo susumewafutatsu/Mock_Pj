@@ -91,11 +91,11 @@ jwt:
   expiration-ms: 86400000        
   refresh-expiration-ms: 604800000  
 
-# ── Phiên làm bài của học sinh ─────────────────────────────────
+# ── Phiên làm bài của thí sinh ─────────────────────────────────
 exam:
   session:
     # Chu kỳ job quét các phiên đã quá ExpiresAt để nộp hộ. Chỉ là lưới an toàn
-    # cho học sinh đã offline — người còn online được nộp ngay ở request kế tiếp.
+    # cho thí sinh đã offline — người còn online được nộp ngay ở request kế tiếp.
     auto-submit-interval-ms: 30000
     # Chu kỳ job đánh dấu AtRiskStatus.
     at-risk-scan-interval-ms: 30000
@@ -106,19 +106,32 @@ exam:
 
   # ── Phần Redis gánh hộ MySQL ─────────────────────────────────────
   # Redis KHÔNG giữ bài làm hay điểm — những thứ đó nằm trong MySQL. Mất Redis
-  # thì hệ thống tự quay về đường DB, kì thi vẫn chạy, chỉ chậm hơn.
+  # thì hệ thống tự quay về đường DB, bài thi vẫn chạy, chỉ chậm hơn.
   redis:
-    # Đề thi đã snapshot được cache bao lâu. Giáo viên sửa đề là cache bị xoá
+    # Đề thi đã snapshot được cache bao lâu. Người ra đề sửa đề là cache bị xoá
     # ngay, TTL này chỉ là lưới an toàn cho việc sửa dữ liệu thẳng dưới DB.
     paper-ttl-seconds: 600
-    # Khoá chống tạo hai phiên cho cùng một học sinh. Chỉ cần đủ dài cho một
+    # Khoá chống tạo hai phiên cho cùng một thí sinh. Chỉ cần đủ dài cho một
     # transaction ngắn; khoá được trả ngay sau khi commit.
     start-lock-seconds: 10
     # Bao lâu mới ghi LastActiveAt xuống MySQL một lần. Redis nhận mọi nhịp
     # heartbeat, DB chỉ nhận một lần mỗi chu kỳ này.
     # PHẢI nhỏ hơn hẳn at-risk-after-seconds, nếu không cột LastActiveAt lạc
-    # hậu tới mức job quét tưởng nhầm học sinh đang thi là đã rớt mạng.
+    # hậu tới mức job quét tưởng nhầm thí sinh đang thi là đã rớt mạng.
     last-active-flush-seconds: 30
+
+# ── Nghiệp vụ học tập (revision_plan.md §3.4) ──────────────────
+study:
+  srs:
+    # Trần số thẻ cho một phiên ôn. Đây là tính năng chứ không phải giới hạn
+    # kỹ thuật: người nghỉ hai tuần quay lại sẽ có vài trăm thẻ quá hạn, và
+    # ném cả đống đó vào mặt họ là cách chắc chắn nhất khiến họ bỏ hẳn.
+    # 100 thẻ tương đương khoảng 15–20 phút ôn, vừa một buổi.
+    daily-limit: 100
+    # Trần số thẻ nạp vào lịch trong một lần ghi danh bộ thẻ. Chặn việc một
+    # bộ khổng lồ do người dùng tự tạo sinh ra hàng chục nghìn dòng trong
+    # UserCardStates chỉ bằng một cú bấm.
+    max-enroll-per-deck: 500
 
 # ── Swagger UI ─────────────────────────────────────────────────
 springdoc:

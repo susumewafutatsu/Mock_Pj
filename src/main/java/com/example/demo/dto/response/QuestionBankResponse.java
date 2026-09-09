@@ -6,7 +6,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * Ngân hàng câu hỏi của một giáo viên, dùng cho danh sách chọn ngân hàng
+ * Ngân hàng câu hỏi của một người ra đề, dùng cho danh sách chọn ngân hàng
  * ở trang quản lý câu hỏi.
  */
 @Data

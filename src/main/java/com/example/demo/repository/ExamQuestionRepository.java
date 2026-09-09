@@ -22,7 +22,7 @@ public interface ExamQuestionRepository extends JpaRepository<ExamQuestion, Exam
 
     long countByExam_ExamId(Integer examId);
 
-    /** Số câu của nhiều đề trong một query — dùng cho danh sách đề của học sinh. */
+    /** Số câu của nhiều đề trong một query — dùng cho danh sách đề của thí sinh. */
     @Query("""
             select eq.exam.examId as examId, count(eq) as total
             from ExamQuestion eq

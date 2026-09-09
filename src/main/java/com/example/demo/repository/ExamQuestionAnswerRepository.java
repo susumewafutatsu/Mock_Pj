@@ -10,11 +10,11 @@ import java.util.Optional;
 @Repository
 public interface ExamQuestionAnswerRepository extends JpaRepository<ExamQuestionAnswer, Integer> {
 
-    /** Đáp án hiển thị cho học sinh. Không trả về cờ IsCorrect ra ngoài API. */
+    /** Đáp án hiển thị cho thí sinh. Không trả về cờ IsCorrect ra ngoài API. */
     List<ExamQuestionAnswer> findByExamQuestion_Exam_ExamIdAndExamQuestion_Question_QuestionIdOrderByAnswerOrderAsc(
             Integer examId, Integer questionId);
 
-    /** Dùng khi chấm: đáp án học sinh chọn có thuộc đúng câu hỏi của đề này không. */
+    /** Dùng khi chấm: đáp án thí sinh chọn có thuộc đúng câu hỏi của đề này không. */
     Optional<ExamQuestionAnswer> findBySnapshotAnswerIdAndExamQuestion_Exam_ExamId(
             Integer snapshotAnswerId, Integer examId);
 

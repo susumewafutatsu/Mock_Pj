@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Câu hỏi nhìn từ phía giáo viên (có cờ đáp án đúng).
- * KHÔNG dùng DTO này cho học sinh đang làm bài.
+ * Câu hỏi nhìn từ phía người ra đề (có cờ đáp án đúng).
+ * KHÔNG dùng DTO này cho thí sinh đang làm bài.
  */
 @Data
 @Builder

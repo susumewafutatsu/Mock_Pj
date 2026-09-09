@@ -1,0 +1,100 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # SỔ TAY CÂU SAI — §3.4(a) của revision_plan.md
+  #
+  # Vì sao bảng này rẻ mà giá trị cao: dữ liệu "câu nào học sinh làm sai"
+  # ĐÃ nằm sẵn trong SubmissionDetails.IsCorrect = false. Bảng này không
+  # tạo ra dữ liệu mới, nó chỉ tổng hợp lại thành một hàng đợi ôn tập bền
+  # theo từng người, để trả lời được câu mà SubmissionDetails không trả
+  # lời nổi: "câu này tôi đã sai mấy lần rồi, khi nào nên ôn lại?"
+  #
+  # Không gắn vào một bài làm cụ thể nào: một câu hỏi sai ở ba đề khác
+  # nhau vẫn chỉ là MỘT dòng ở đây, với WrongCount = 3. Đó là lý do có
+  # UNIQUE (UserID, QuestionID).
+  #
+  # UserID là VARCHAR(50) chứ không phải INT — khoá chính của Users là
+  # UUID dạng chuỗi (xem User.java). FK sai kiểu là app chết lúc khởi
+  # động vì ddl-auto: validate.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.4.0-01-create-mistake-entries
+      author: team
+      comment: "Sổ tay câu sai: mỗi (học sinh, câu hỏi) sai một dòng, kèm lịch ôn lại."
+      changes:
+        - createTable:
+            tableName: MistakeEntries
+            columns:
+              - column:
+                  name: MistakeID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_mistake_user
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_mistake_question
+                    references: Questions(QuestionID)
+                    deleteCascade: true
+              # Sai bao nhiêu lần từ trước tới nay. Càng cao thì càng nên ôn sớm.
+              - column:
+                  name: WrongCount
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              # Số lần trả lời đúng LIÊN TIẾP kể từ lần sai gần nhất.
+              # Đủ 2 lần thì coi như đã nắm được và câu rời khỏi hàng đợi.
+              # Sai lại giữa chừng thì đếm lại từ 0 — nhớ lõm bõm không tính là thuộc.
+              - column:
+                  name: CorrectStreak
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: LastWrongAt
+                  type: DATETIME
+              # Mốc nên ôn lại. Giãn dần theo CorrectStreak, kéo gần lại mỗi lần sai.
+              - column:
+                  name: NextReviewAt
+                  type: DATETIME
+              # Khác NULL = đã thuộc, không hiện trong hàng đợi nữa.
+              # Giữ lại dòng thay vì xoá, để còn thống kê "đã sửa được bao nhiêu câu".
+              - column:
+                  name: MasteredAt
+                  type: DATETIME
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addUniqueConstraint:
+            tableName: MistakeEntries
+            columnNames: UserID, QuestionID
+            constraintName: UC_Mistake_User_Question
+
+        # Truy vấn nóng nhất: "câu đến hạn ôn của tôi" —
+        # WHERE UserID = ? AND MasteredAt IS NULL ORDER BY NextReviewAt
+        - createIndex:
+            tableName: MistakeEntries
+            indexName: idx_mistake_user_due
+            columns:
+              - column:
+                  name: UserID
+              - column:
+                  name: MasteredAt
+              - column:
+                  name: NextReviewAt

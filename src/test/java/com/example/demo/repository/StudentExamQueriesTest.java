@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ul>
  *   <li>Điều kiện {@code :param is null or cột = :param} dùng để bỏ qua bộ lọc:
  *       nếu Hibernate không suy được kiểu của tham số null thì lỗi chỉ nổ khi
- *       học sinh mở trang mà không chọn bộ lọc — tức là ngay lần đầu vào.</li>
+ *       thí sinh mở trang mà không chọn bộ lọc — tức là ngay lần đầu vào.</li>
  *   <li>Mệnh đề {@code in :ids} với danh sách rỗng sinh ra {@code in ()}, là SQL
  *       không hợp lệ. Các phương thức này đều yêu cầu người gọi tự chặn danh
  *       sách rỗng, nên ở đây chỉ kiểm nhánh có phần tử.</li>
@@ -42,16 +42,19 @@ class StudentExamQueriesTest {
     private ExamRepository examRepository;
 
     @Autowired
-    private ClassRepository classRepository;
+    private RoomRepository roomRepository;
 
     @Autowired
-    private ClassStudentRepository classStudentRepository;
+    private RoomMemberRepository roomMemberRepository;
+
+    @Autowired
+    private RoomExamRepository roomExamRepository;
 
     @Test
     void locDeLuyenTapVoiMoiToHopBoLocDeuChayDuoc() {
         Pageable firstPage = PageRequest.of(0, 12, Sort.by(Sort.Direction.DESC, "examId"));
 
-        // Đây là lời gọi của trang luyện tập lúc học sinh chưa chọn gì —
+        // Đây là lời gọi của trang luyện tập lúc thí sinh chưa chọn gì —
         // trường hợp hay gặp nhất và cũng là trường hợp rủi ro nhất.
         assertNotNull(examRepository.findPracticeExams(null, null, firstPage));
 
@@ -81,10 +84,14 @@ class StudentExamQueriesTest {
 
     @Test
     void cacTruyVanTheoDanhSachIdDeuChayDuoc() {
-        assertNotNull(examRepository.findByClassIdIn(List.of(1)));
+        // Sau khi bỏ lớp, mấy câu này join qua bảng nối RoomExams thay vì đọc
+        // một cột trên chính đề — nhiều chỗ sai hơn hẳn, nên càng cần chạy thật.
+        assertNotNull(examRepository.findByRoomIdIn(List.of(1)));
         assertNotNull(examRepository.findPracticeExamsByLevelIdIn(List.of(1, 2)));
-        assertNotNull(classRepository.findAllByIdWithDetails(List.of(1)));
-        assertNotNull(classStudentRepository.countByClassIdIn(List.of(1)));
+        assertNotNull(roomRepository.findAllByIdWithDetails(List.of(1)));
+        assertNotNull(roomMemberRepository.countActiveByRoomIdIn(List.of(1)));
+        assertNotNull(roomExamRepository.countByRoomIdIn(List.of(1)));
+        assertNotNull(roomExamRepository.findExamRoomPairs(List.of(1)));
     }
 
     @Test

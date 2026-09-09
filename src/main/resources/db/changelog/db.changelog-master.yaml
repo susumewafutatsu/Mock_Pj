@@ -78,3 +78,56 @@ databaseChangeLog:
   - include:
       file: db/changelog/v1.1.0/03-seed-tags.yaml
       relativeToChangelogFile: false
+
+  # ── v1.2.0: Nhiều lượt làm bài (Exams.MaxAttempts) + cho xem lại bài đã
+  #    nộp kèm đáp án (Exams.AllowReview). Xem chú thích trong file. ──
+  - include:
+      file: db/changelog/v1.2.0/01-exam-attempts-and-review.yaml
+      relativeToChangelogFile: false
+
+  # ── v1.4.0: Nghiệp vụ HỌC TẬP (revision_plan.md §3.4) ────────
+  #    Sổ tay câu sai + từ vựng/kanji + bộ thẻ + lịch lặp lại ngắt
+  #    quãng. Tách hẳn khỏi nghiệp vụ thi: không bảng nào ở đây tham
+  #    chiếu Exams/Submissions, trừ MistakeEntries trỏ tới Questions
+  #    để lấy lại đề bài của câu đã làm sai.
+  - include:
+      file: db/changelog/v1.4.0/01-create-mistake-book.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.4.0/02-create-vocab-kanji-srs.yaml
+      relativeToChangelogFile: false
+
+  # Nội dung học N5. KHÔNG có context nên luôn nạp — đây là nội dung
+  # thật của sản phẩm, không phải dữ liệu mẫu để test.
+  - include:
+      file: db/changelog/v1.4.0/03-seed-vocab-kanji-n5.yaml
+      relativeToChangelogFile: false
+
+  # ── v1.5.0: Bỏ Lớp học, chuyển sang Phòng thi (revision_plan.md §2)
+  #    Ba file tách riêng có chủ đích: 01 tạo bảng (an toàn), 02 chuyển dữ
+  #    liệu (cần kiểm lại), 03 xoá bảng cũ (KHÔNG LÙI ĐƯỢC). Đọc phần đầu
+  #    file 03 trước khi cho chạy trên DB có dữ liệu thật.
+  - include:
+      file: db/changelog/v1.5.0/01-create-rooms.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.5.0/02-migrate-classes-to-rooms.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.5.0/03-drop-classes.yaml
+      relativeToChangelogFile: false
+
+  # ── v1.6.0: Khoá học (revision_plan.md §3.4c) ────────────────
+  #    Bài học lý thuyết để đọc, bấm hoàn thành là ra phần trăm. Người ra
+  #    đề soạn, Admin duyệt rồi mới xuất bản. Đây là chỗ chứa NGỮ PHÁP và
+  #    CHỮ HÁN — hai loại nội dung mà bộ thẻ ở v1.4.0 không diễn tả nổi.
+  - include:
+      file: db/changelog/v1.6.0/01-create-courses.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.6.0/02-seed-demo-course.yaml
+      relativeToChangelogFile: false

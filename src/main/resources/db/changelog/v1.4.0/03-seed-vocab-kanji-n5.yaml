@@ -1,0 +1,181 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # NỘI DUNG HỌC N5 — CHẠY MẶC ĐỊNH (không có context "demo").
+  #
+  # Khác các file seed dữ liệu mẫu: đây KHÔNG phải dữ liệu để test mà là
+  # nội dung học thật của sản phẩm, giống bộ môn học / trình độ ở v1.0.4.
+  # Bắt giáo viên gõ tay 800 từ N5 qua UI là chuyện không xảy ra, nên
+  # nội dung nền phải đi kèm hệ thống.
+  #
+  # ID cố định trong dải 1..999 để mọi máy trong team dùng cùng con số.
+  # Dải 9001+ vẫn thuộc về dữ liệu demo như quy ước cũ.
+  #
+  # LevelID = 1 là N5 (xem v1.0.4/01-seed-catalog.yaml).
+  #
+  # ⚠ HAI ĐIỀU KHÔNG ĐƯỢC LÀM VỚI FILE NÀY — cả hai đều đã xảy ra một lần:
+  #
+  # 1. KHÔNG sửa nội dung changeSet sau khi nó đã chạy ở đâu đó. Liquibase
+  #    lưu checksum của từng changeSet; đổi dù chỉ một dấu phẩy trong chú
+  #    thích cũng làm app từ chối khởi động với "Validation Failed: checksum".
+  #    Muốn đổi nội dung thì thêm changeSet MỚI, không sửa cái cũ.
+  #
+  # 2. KHÔNG tìm-thay hàng loạt thuật ngữ ứng dụng lên file này. Cột Meaning
+  #    là NGHĨA TỪ ĐIỂN, không phải nhãn giao diện. Một lần đổi "học sinh"
+  #    thành "thí sinh" trên toàn dự án đã biến 学生 (gakusei = học sinh)
+  #    thành "thí sinh" và 先生 (sensei = giáo viên) thành "người ra đề" —
+  #    sai nghĩa, và người học sẽ học thuộc cái sai đó.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.4.0-03-seed-vocab-n5
+      author: team
+      comment: "40 từ vựng N5: danh từ, động từ, tính từ thường gặp nhất, kèm câu ví dụ."
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM VocabItems WHERE VocabID BETWEEN 1 AND 999
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO VocabItems
+                (VocabID, Word, Reading, Meaning, PartOfSpeech, LevelID, ExampleSentence, ExampleMeaning) VALUES
+                (1,  '学生',   'がくせい',     'học sinh, sinh viên',  'Danh từ', 1, 'わたしは学生です。',            'Tôi là sinh viên.'),
+                (2,  '先生',   'せんせい',     'giáo viên',            'Danh từ', 1, '先生はきょうしつにいます。',    'Thầy giáo đang ở trong lớp.'),
+                (3,  '学校',   'がっこう',     'trường học',           'Danh từ', 1, 'まいにち学校へ行きます。',      'Hằng ngày tôi đến trường.'),
+                (4,  '友達',   'ともだち',     'bạn bè',               'Danh từ', 1, '友達と映画を見ます。',          'Tôi xem phim với bạn.'),
+                (5,  '家族',   'かぞく',       'gia đình',             'Danh từ', 1, '家族は四人です。',              'Gia đình tôi có bốn người.'),
+                (6,  '会社',   'かいしゃ',     'công ty',              'Danh từ', 1, '父は会社で働いています。',      'Bố tôi làm việc ở công ty.'),
+                (7,  '時間',   'じかん',       'thời gian',            'Danh từ', 1, '時間がありません。',            'Tôi không có thời gian.'),
+                (8,  '今日',   'きょう',       'hôm nay',              'Danh từ', 1, '今日は暑いです。',              'Hôm nay trời nóng.'),
+                (9,  '明日',   'あした',       'ngày mai',             'Danh từ', 1, '明日また来ます。',              'Ngày mai tôi lại đến.'),
+                (10, '毎日',   'まいにち',     'hằng ngày',            'Danh từ', 1, '毎日日本語を勉強します。',      'Hằng ngày tôi học tiếng Nhật.'),
+                (11, '食べる', 'たべる',       'ăn',                   'Động từ', 1, '朝ごはんを食べます。',          'Tôi ăn sáng.'),
+                (12, '飲む',   'のむ',         'uống',                 'Động từ', 1, '水を飲みます。',                'Tôi uống nước.'),
+                (13, '見る',   'みる',         'xem, nhìn',            'Động từ', 1, 'テレビを見ます。',              'Tôi xem tivi.'),
+                (14, '聞く',   'きく',         'nghe, hỏi',            'Động từ', 1, '音楽を聞きます。',              'Tôi nghe nhạc.'),
+                (15, '読む',   'よむ',         'đọc',                  'Động từ', 1, '本を読みます。',                'Tôi đọc sách.'),
+                (16, '書く',   'かく',         'viết',                 'Động từ', 1, '手紙を書きます。',              'Tôi viết thư.'),
+                (17, '話す',   'はなす',       'nói chuyện',           'Động từ', 1, '日本語で話します。',            'Tôi nói bằng tiếng Nhật.'),
+                (18, '行く',   'いく',         'đi',                   'Động từ', 1, '東京へ行きます。',              'Tôi đi Tokyo.'),
+                (19, '来る',   'くる',         'đến',                  'Động từ', 1, '友達が来ます。',                'Bạn tôi đến.'),
+                (20, '帰る',   'かえる',       'trở về',               'Động từ', 1, '家へ帰ります。',                'Tôi về nhà.'),
+                (21, '買う',   'かう',         'mua',                  'Động từ', 1, 'パンを買います。',              'Tôi mua bánh mì.'),
+                (22, '働く',   'はたらく',     'làm việc',             'Động từ', 1, '銀行で働きます。',              'Tôi làm việc ở ngân hàng.'),
+                (23, '休む',   'やすむ',       'nghỉ',                 'Động từ', 1, '今日は休みます。',              'Hôm nay tôi nghỉ.'),
+                (24, '起きる', 'おきる',       'thức dậy',             'Động từ', 1, '六時に起きます。',              'Tôi dậy lúc sáu giờ.'),
+                (25, '寝る',   'ねる',         'ngủ',                  'Động từ', 1, '十一時に寝ます。',              'Tôi ngủ lúc mười một giờ.'),
+                (26, '大きい', 'おおきい',     'to, lớn',              'Tính từ đuôi i',  1, '大きいかばんですね。',   'Cái cặp to nhỉ.'),
+                (27, '小さい', 'ちいさい',     'nhỏ',                  'Tính từ đuôi i',  1, '小さい部屋です。',       'Đây là căn phòng nhỏ.'),
+                (28, '新しい', 'あたらしい',   'mới',                  'Tính từ đuôi i',  1, '新しい車を買いました。', 'Tôi đã mua xe mới.'),
+                (29, '古い',   'ふるい',       'cũ',                   'Tính từ đuôi i',  1, 'この本は古いです。',     'Quyển sách này cũ.'),
+                (30, '高い',   'たかい',       'cao, đắt',             'Tính từ đuôi i',  1, 'この時計は高いです。',   'Cái đồng hồ này đắt.'),
+                (31, '安い',   'やすい',       'rẻ',                   'Tính từ đuôi i',  1, 'この店は安いです。',     'Cửa hàng này rẻ.'),
+                (32, '難しい', 'むずかしい',   'khó',                  'Tính từ đuôi i',  1, '漢字は難しいです。',     'Chữ Hán thì khó.'),
+                (33, '易しい', 'やさしい',     'dễ',                   'Tính từ đuôi i',  1, 'この問題は易しいです。', 'Bài này dễ.'),
+                (34, '元気',   'げんき',       'khoẻ mạnh',            'Tính từ đuôi na', 1, 'お元気ですか。',         'Bạn có khoẻ không?'),
+                (35, '静か',   'しずか',       'yên tĩnh',             'Tính từ đuôi na', 1, 'この町は静かです。',     'Thị trấn này yên tĩnh.'),
+                (36, '便利',   'べんり',       'tiện lợi',             'Tính từ đuôi na', 1, '地下鉄は便利です。',     'Tàu điện ngầm rất tiện.'),
+                (37, '好き',   'すき',         'thích',                'Tính từ đuôi na', 1, '音楽が好きです。',       'Tôi thích âm nhạc.'),
+                (38, '電車',   'でんしゃ',     'tàu điện',             'Danh từ', 1, '電車で行きます。',              'Tôi đi bằng tàu điện.'),
+                (39, '病院',   'びょういん',   'bệnh viện',            'Danh từ', 1, '病院へ行きました。',            'Tôi đã đến bệnh viện.'),
+                (40, '天気',   'てんき',       'thời tiết',            'Danh từ', 1, '今日はいい天気です。',          'Hôm nay thời tiết đẹp.');
+      rollback:
+        - sql:
+            sql: DELETE FROM VocabItems WHERE VocabID BETWEEN 1 AND 999
+
+  - changeSet:
+      id: v1.4.0-03-seed-kanji-n5
+      author: team
+      comment: >-
+        20 chữ Hán N5 đầu tiên. Onyomi ghi bằng katakana và Kunyomi bằng
+        hiragana theo đúng quy ước từ điển Nhật — người học quen mắt với
+        cách trình bày đó, đổi đi là gây nhầm âm On với âm Kun.
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM KanjiItems WHERE KanjiID BETWEEN 1 AND 999
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO KanjiItems
+                (KanjiID, Glyph, Onyomi, Kunyomi, Meaning, StrokeCount, Radical, LevelID, Mnemonic) VALUES
+                (1,  '日', 'ニチ、ジツ',   'ひ、か',        'nhật — ngày, mặt trời',        4,  '日', 1, 'Hình mặt trời có một chấm ở giữa.'),
+                (2,  '月', 'ゲツ、ガツ',   'つき',          'nguyệt — tháng, mặt trăng',    4,  '月', 1, 'Hình vầng trăng khuyết.'),
+                (3,  '火', 'カ',           'ひ',            'hoả — lửa',                    4,  '火', 1, 'Ngọn lửa với hai tia bắn sang hai bên.'),
+                (4,  '水', 'スイ',         'みず',          'thuỷ — nước',                  4,  '水', 1, 'Dòng nước chảy toả ra hai bên.'),
+                (5,  '木', 'モク、ボク',   'き',            'mộc — cây, gỗ',                4,  '木', 1, 'Cái cây có thân, cành và rễ.'),
+                (6,  '金', 'キン、コン',   'かね',          'kim — vàng, tiền, kim loại',   8,  '金', 1, 'Kim loại quý cất dưới mái nhà.'),
+                (7,  '土', 'ド、ト',       'つち',          'thổ — đất',                    3,  '土', 1, 'Mầm cây nhú lên khỏi mặt đất.'),
+                (8,  '人', 'ジン、ニン',   'ひと',          'nhân — người',                 2,  '人', 1, 'Hình một người đang bước đi.'),
+                (9,  '山', 'サン',         'やま',          'sơn — núi',                    3,  '山', 1, 'Ba đỉnh núi nhô lên.'),
+                (10, '川', 'セン',         'かわ',          'xuyên — sông',                 3,  '川', 1, 'Ba dòng nước chảy song song.'),
+                (11, '大', 'ダイ、タイ',   'おお',          'đại — to lớn',                 3,  '大', 1, 'Người dang rộng hai tay.'),
+                (12, '小', 'ショウ',       'ちい、こ',      'tiểu — nhỏ',                   3,  '小', 1, 'Một vật nhỏ bị chia làm ba phần.'),
+                (13, '上', 'ジョウ',       'うえ、あ',      'thượng — trên',                3,  '一', 1, 'Vạch nhô lên phía trên đường ngang.'),
+                (14, '下', 'カ、ゲ',       'した、さ',      'hạ — dưới',                    3,  '一', 1, 'Vạch thõng xuống phía dưới đường ngang.'),
+                (15, '中', 'チュウ',       'なか',          'trung — giữa, ở trong',        4,  '丨', 1, 'Một nét xuyên qua chính giữa khung.'),
+                (16, '学', 'ガク',         'まな',          'học',                          8,  '子', 1, 'Đứa trẻ ngồi dưới mái trường.'),
+                (17, '生', 'セイ、ショウ', 'い、う、なま',  'sinh — sống, sinh ra, tươi',   5,  '生', 1, 'Mầm cây mọc lên từ mặt đất.'),
+                (18, '先', 'セン',         'さき',          'tiên — trước, đầu tiên',       6,  '儿', 1, 'Người bước lên phía trước.'),
+                (19, '年', 'ネン',         'とし',          'niên — năm',                   6,  '干', 1, 'Bó lúa gặt mỗi năm một lần.'),
+                (20, '時', 'ジ',           'とき',          'thời — thời gian, giờ',        10, '日', 1, 'Mặt trời bên cạnh ngôi đền dùng để đo giờ.');
+      rollback:
+        - sql:
+            sql: DELETE FROM KanjiItems WHERE KanjiID BETWEEN 1 AND 999
+
+  - changeSet:
+      id: v1.4.0-03-seed-decks-n5
+      author: team
+      comment: >-
+        5 bộ thẻ N5 dựng sẵn (OwnerID NULL = của hệ thống). Bốn bộ đầu chia
+        theo loại từ để người mới có lối vào rõ ràng; bộ thứ năm trộn cả từ
+        vựng lẫn kanji, đúng như một bài học thật — và cũng là bằng chứng
+        DeckItems chứa được hai loại thẻ trong một bộ.
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Decks WHERE DeckID BETWEEN 1 AND 999
+      changes:
+        - sql:
+            splitStatements: true
+            endDelimiter: ";"
+            sql: |
+              INSERT INTO Decks (DeckID, Name, Description, LevelID, OwnerID, IsPublic) VALUES
+                (1, 'N5 · Danh từ thường gặp', 'Người, nơi chốn và thời gian — nhóm từ xuất hiện dày nhất trong đề N5.', 1, NULL, TRUE),
+                (2, 'N5 · Động từ cơ bản',     'Mười lăm động từ dùng hằng ngày, đủ để đặt câu đơn giản.',                1, NULL, TRUE),
+                (3, 'N5 · Tính từ cơ bản',     'Tính từ đuôi i và đuôi na thường gặp, kèm câu ví dụ để phân biệt.',       1, NULL, TRUE),
+                (4, 'N5 · 20 chữ Hán đầu tiên','Chữ Hán về thiên nhiên, con người và thứ trong tuần.',                    1, NULL, TRUE),
+                (5, 'N5 · Bài 1 tổng hợp',     'Từ vựng và chữ Hán của bài đầu tiên, học chung một lượt.',                1, NULL, TRUE);
+
+              INSERT INTO DeckItems (DeckID, ItemType, ItemID, OrderNo) VALUES
+                (1,'VOCAB',1,1),(1,'VOCAB',2,2),(1,'VOCAB',3,3),(1,'VOCAB',4,4),(1,'VOCAB',5,5),
+                (1,'VOCAB',6,6),(1,'VOCAB',7,7),(1,'VOCAB',8,8),(1,'VOCAB',9,9),(1,'VOCAB',10,10),
+                (1,'VOCAB',38,11),(1,'VOCAB',39,12),(1,'VOCAB',40,13),
+
+                (2,'VOCAB',11,1),(2,'VOCAB',12,2),(2,'VOCAB',13,3),(2,'VOCAB',14,4),(2,'VOCAB',15,5),
+                (2,'VOCAB',16,6),(2,'VOCAB',17,7),(2,'VOCAB',18,8),(2,'VOCAB',19,9),(2,'VOCAB',20,10),
+                (2,'VOCAB',21,11),(2,'VOCAB',22,12),(2,'VOCAB',23,13),(2,'VOCAB',24,14),(2,'VOCAB',25,15),
+
+                (3,'VOCAB',26,1),(3,'VOCAB',27,2),(3,'VOCAB',28,3),(3,'VOCAB',29,4),(3,'VOCAB',30,5),
+                (3,'VOCAB',31,6),(3,'VOCAB',32,7),(3,'VOCAB',33,8),(3,'VOCAB',34,9),(3,'VOCAB',35,10),
+                (3,'VOCAB',36,11),(3,'VOCAB',37,12),
+
+                (4,'KANJI',1,1),(4,'KANJI',2,2),(4,'KANJI',3,3),(4,'KANJI',4,4),(4,'KANJI',5,5),
+                (4,'KANJI',6,6),(4,'KANJI',7,7),(4,'KANJI',8,8),(4,'KANJI',9,9),(4,'KANJI',10,10),
+                (4,'KANJI',11,11),(4,'KANJI',12,12),(4,'KANJI',13,13),(4,'KANJI',14,14),(4,'KANJI',15,15),
+                (4,'KANJI',16,16),(4,'KANJI',17,17),(4,'KANJI',18,18),(4,'KANJI',19,19),(4,'KANJI',20,20),
+
+                (5,'KANJI',16,1),(5,'KANJI',17,2),(5,'KANJI',18,3),
+                (5,'VOCAB',1,4),(5,'VOCAB',2,5),(5,'VOCAB',3,6),(5,'VOCAB',4,7);
+      rollback:
+        - sql:
+            sql: DELETE FROM DeckItems WHERE DeckID BETWEEN 1 AND 999
+        - sql:
+            sql: DELETE FROM Decks WHERE DeckID BETWEEN 1 AND 999

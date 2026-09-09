@@ -14,7 +14,7 @@ import java.util.List;
  *
  * Về đồng hồ: client đếm ngược theo {@code remainingSeconds}, và có thể tự
  * hiệu chỉnh lệch giờ bằng cặp {@code serverTime} / {@code expiresAt}. Không
- * bao giờ tính thời gian còn lại từ giờ máy của học sinh.
+ * bao giờ tính thời gian còn lại từ giờ máy của thí sinh.
  */
 @Data
 @Builder
@@ -24,6 +24,12 @@ public class ExamSessionResponse {
     private Integer examId;
     private String examTitle;
     private Integer durationMinutes;
+
+    /** Lượt làm thứ mấy, đếm từ 1 — phòng thi hiện "Lần 2/3" trên thanh tiêu đề. */
+    private Integer attemptNumber;
+
+    /** Số lượt tối đa của đề. null = không giới hạn. */
+    private Integer maxAttempts;
 
     private SubmissionStatus status;
 
@@ -41,7 +47,7 @@ public class ExamSessionResponse {
     /** Thời gian còn lại theo giờ server, đơn vị giây. */
     private long remainingSeconds;
 
-    /** Học sinh đang bị nghi mất kết nối (heartbeat trễ). */
+    /** Thí sinh đang bị nghi mất kết nối (heartbeat trễ). */
     private boolean atRisk;
 
     private int totalQuestions;

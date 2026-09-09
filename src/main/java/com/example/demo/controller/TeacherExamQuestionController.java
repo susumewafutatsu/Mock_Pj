@@ -33,7 +33,7 @@ public class TeacherExamQuestionController {
 
     /**
      * Cập nhật snapshot theo bản mới nhất trong ngân hàng câu hỏi.
-     * Trả 409 nếu đề đã có học sinh làm bài.
+     * Trả 409 nếu đề đã có thí sinh làm bài.
      */
     @PostMapping("/{questionId}/refresh-snapshot")
     public ApiResponse<Void> refresh(@PathVariable Integer examId,

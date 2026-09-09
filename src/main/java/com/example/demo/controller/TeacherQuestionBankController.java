@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Ngân hàng câu hỏi của giáo viên. Trang quản lý câu hỏi cần endpoint này để
+ * Ngân hàng câu hỏi của người ra đề. Trang quản lý câu hỏi cần endpoint này để
  * chọn ngân hàng trước khi thao tác với câu hỏi bên trong.
  */
 @RestController

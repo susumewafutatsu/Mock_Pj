@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Danh mục dùng chung cho các form của giáo viên (tạo lớp, tạo ngân hàng câu
+ * Danh mục dùng chung cho các form của người ra đề (tạo phòng thi, tạo ngân hàng câu
  * hỏi, tạo đề thi)
  * Base path: /api/teacher
  */

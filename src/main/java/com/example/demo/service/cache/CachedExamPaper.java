@@ -13,7 +13,7 @@ import java.util.List;
  * Trông thừa nhưng không thừa: Jackson gắn thông tin kiểu bằng thuộc tính
  * {@code "@class"}, mà một JSON array ở gốc thì không có chỗ để gắn thuộc tính.
  * Cất thẳng {@code List<ExamQuestionView>} thì ghi vẫn trôi, tới lúc ĐỌC mới
- * hỏng — nghĩa là lỗi chỉ hiện ra khi cache đã ấm, tức là đang giữa kì thi.
+ * hỏng — nghĩa là lỗi chỉ hiện ra khi cache đã ấm, tức là đang giữa bài thi.
  *
  * Bọc lại thành một object thì gốc có chỗ cho {@code "@class"} và vòng ghi–đọc
  * khép kín. Lớp này chỉ sống trong Redis, không bao giờ đi ra tới client.

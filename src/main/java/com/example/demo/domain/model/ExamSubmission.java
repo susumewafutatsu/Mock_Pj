@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 @Table(
         name = "ExamSubmissions",
         uniqueConstraints = @UniqueConstraint(
-                name = "uq_submission_exam_student",
-                columnNames = {"ExamID", "StudentID"})
+                name = "uq_submission_exam_student_attempt",
+                columnNames = {"ExamID", "StudentID", "AttemptNumber"})
 )
 @Getter
 @Setter
@@ -36,6 +36,17 @@ public class ExamSubmission {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "StudentID", nullable = false)
     private User student;
+
+    /**
+     * Lượt làm thứ mấy của thí sinh này trên đề này, đếm từ 1.
+     *
+     * Cùng với ExamID + StudentID tạo thành khoá UNIQUE — đó là chốt cuối chống
+     * double-click / nhiều tab sinh ra hai phiên cho cùng một lượt. Số lượt tối
+     * đa nằm ở {@link Exam#getMaxAttempts()}, do tầng service kiểm.
+     */
+    @Column(name = "AttemptNumber", nullable = false)
+    @Builder.Default
+    private Integer attemptNumber = 1;
 
     @CreationTimestamp
     @Column(name = "StartedAt", updatable = false)
@@ -71,7 +82,7 @@ public class ExamSubmission {
      *
      * Đây là mốc thời gian duy nhất có thẩm quyền. Client chỉ nhận cột này về
      * để đếm ngược; chỉnh đồng hồ máy không làm thay đổi thời gian còn lại.
-     * Cột này KHÔNG được nới ra khi học sinh mất mạng — heartbeat chỉ dùng để
+     * Cột này KHÔNG được nới ra khi thí sinh mất mạng — heartbeat chỉ dùng để
      * phát hiện rớt mạng, không dùng để bù giờ.
      */
     @Column(name = "ExpiresAt")
@@ -79,13 +90,13 @@ public class ExamSubmission {
 
     /**
      * Lần cuối client còn liên lạc được với server (heartbeat 15-30 giây/lần).
-     * Dùng để suy ra {@link #atRiskStatus}: học sinh im lặng quá lâu trong khi
+     * Dùng để suy ra {@link #atRiskStatus}: thí sinh im lặng quá lâu trong khi
      * phiên vẫn IN_PROGRESS thì rất có thể đã rớt mạng hoặc thoát đột ngột.
      */
     @Column(name = "LastActiveAt")
     private LocalDateTime lastActiveAt;
 
-    /** Bài do server tự nộp khi hết giờ, không phải học sinh bấm nộp. */
+    /** Bài do server tự nộp khi hết giờ, không phải thí sinh bấm nộp. */
     @Column(name = "AutoSubmitted")
     @Builder.Default
     private Boolean autoSubmitted = false;

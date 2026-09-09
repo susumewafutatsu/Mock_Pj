@@ -34,9 +34,9 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
                                String teacherEmail) {
         Exam exam = requireOwnedExam(examId, teacherEmail);
         // có 1 lỗi ẩn là trong khoảng thời gian hệ thống check xong 
-        // mà có sinh viên nộp bài mà lúc đó giáo viên lại sửa thì sẽ có lỗi
+        // mà có sinh viên nộp bài mà lúc đó người ra đề lại sửa thì sẽ có lỗi
         if (submissionRepository.existsByExamExamId(examId)) {
-            throw new BusinessException("Đề đã có học sinh làm bài, không thể thêm câu hỏi");
+            throw new BusinessException("Đề đã có thí sinh làm bài, không thể thêm câu hỏi");
         }
 
         int order = (int) examQuestionRepository.countByExam_ExamId(examId);
@@ -84,7 +84,7 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
         // của điểm số đã chấm. Sửa nó sẽ làm kết quả cũ không giải thích được.
         if (submissionRepository.existsByExamExamId(examId)) {
             throw new BusinessException(
-                    "Đề đã có học sinh làm bài. Không thể cập nhật lại nội dung câu hỏi trong đề này. "
+                    "Đề đã có thí sinh làm bài. Không thể cập nhật lại nội dung câu hỏi trong đề này. "
                     + "Hãy tạo đề mới nếu cần dùng phiên bản câu hỏi mới nhất.");
         }
 
@@ -110,7 +110,7 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
     public void detachQuestion(Integer examId, Integer questionId, String teacherEmail) {
         requireOwnedExam(examId, teacherEmail);
         if (submissionRepository.existsByExamExamId(examId)) {
-            throw new BusinessException("Đề đã có học sinh làm bài, không thể bỏ câu hỏi");
+            throw new BusinessException("Đề đã có thí sinh làm bài, không thể bỏ câu hỏi");
         }
         ExamQuestion examQuestion = examQuestionRepository
                 .findByExam_ExamIdAndQuestion_QuestionId(examId, questionId)
@@ -125,14 +125,14 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
      * Bỏ bản cache đề thi trong Redis sau khi cấu trúc đề đổi.
      *
      * Chỉ xoá SAU KHI transaction commit. Xoá ngay trong thân method thì có một
-     * kẽ hở: cache vừa trống, một học sinh vào phòng thi nạp lại cache từ dữ
+     * kẽ hở: cache vừa trống, một thí sinh vào phòng thi nạp lại cache từ dữ
      * liệu CŨ (thay đổi chưa commit), rồi transaction mới commit — cache lại sai
      * và lần này không còn ai đi xoá nữa.
      *
      * Ba method sửa đề ở lớp này đều đã chặn khi đề có bài làm, nên trên thực tế
      * hiếm khi có cache để xoá. Vẫn gọi vì đây là nơi duy nhất biết đề vừa đổi:
      * ràng buộc kia là quy tắc nghiệp vụ, có thể nới ra sau, còn cache sai thì
-     * học sinh làm nhầm đề.
+     * thí sinh làm nhầm đề.
      */
     private void evictPaperCache(Integer examId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {

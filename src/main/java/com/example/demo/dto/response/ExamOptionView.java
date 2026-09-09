@@ -8,7 +8,7 @@ import lombok.Data;
 /**
  * Một lựa chọn của câu hỏi, đọc từ snapshot của đề thi.
  *
- * KHÔNG có cờ đáp án đúng: DTO này đi ra tới trình duyệt của học sinh đang
+ * KHÔNG có cờ đáp án đúng: DTO này đi ra tới trình duyệt của thí sinh đang
  * làm bài.
  */
 @Data

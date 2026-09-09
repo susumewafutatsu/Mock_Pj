@@ -6,7 +6,7 @@ import {
 
 /* ============================================================
    TOKENS — "Sổ Điểm Chung": cuốn sổ điểm giấy dùng chung.
-   Vai trò Học sinh viết bằng mực xanh lá.
+   Vai trò Thí sinh viết bằng mực xanh lá.
    ============================================================ */
 const TOKENS = `
 @import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -307,7 +307,7 @@ export default function StudentApp() {
           </div>
           <div>
             <p style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 17, margin: 0, color: "var(--paper-card)" }}>Sổ Điểm Chung</p>
-            <p style={{ fontSize: 11, color: "#B9D2C2", margin: 0 }}>Bảng điều khiển Học sinh</p>
+            <p style={{ fontSize: 11, color: "#B9D2C2", margin: 0 }}>Bảng điều khiển Thí sinh</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>

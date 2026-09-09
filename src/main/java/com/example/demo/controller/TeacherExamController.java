@@ -15,11 +15,11 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Quản lý đề thi của giáo viên.
+ * Quản lý đề thi của người ra đề.
  *
  * Câu hỏi của đề nằm ở {@link TeacherExamQuestionController}
  * ({@code /api/teacher/exams/{examId}/questions}) — tạo đề xong phải gắn câu
- * hỏi, trước đó đề ở trạng thái NO_QUESTIONS và học sinh chưa vào thi được.
+ * hỏi, trước đó đề ở trạng thái NO_QUESTIONS và thí sinh chưa vào thi được.
  *
  * Base path: /api/teacher/exams
  */

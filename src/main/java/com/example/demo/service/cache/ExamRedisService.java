@@ -19,7 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Toàn bộ chỗ chạm vào Redis của chức năng kì thi nằm ở đây.
+ * Toàn bộ chỗ chạm vào Redis của chức năng bài thi nằm ở đây.
  *
  * Gom về một lớp vì hai lý do: tên key chỉ được định nghĩa một chỗ (đổi tiền tố
  * là đổi toàn hệ thống), và quy tắc "Redis lỗi thì đi đường MySQL" chỉ cần viết
@@ -53,7 +53,7 @@ public class ExamRedisService {
     private final StringRedisTemplate stringRedisTemplate;
 
     /**
-     * Đề thi được cache bao lâu. Ngắn thôi: giáo viên sửa đề là cache bị xoá
+     * Đề thi được cache bao lâu. Ngắn thôi: người ra đề sửa đề là cache bị xoá
      * ngay (xem {@link #evictPaper}), TTL này chỉ là lưới an toàn cho trường hợp
      * có ai đó sửa dữ liệu thẳng dưới DB.
      */
@@ -67,11 +67,11 @@ public class ExamRedisService {
     /**
      * Bao lâu mới ghi LastActiveAt xuống MySQL một lần.
      *
-     * Đây là lý do chính khiến heartbeat cần Redis: 500 học sinh nhịp 15 giây là
+     * Đây là lý do chính khiến heartbeat cần Redis: 500 thí sinh nhịp 15 giây là
      * hơn 30 UPDATE mỗi giây bắn thẳng vào bảng ExamSubmissions chỉ để ghi một
      * cột thời gian. Redis nhận toàn bộ nhịp đó, MySQL chỉ nhận một bản ghi mỗi
      * chu kỳ này. Phải nhỏ hơn hẳn at-risk-after-seconds, nếu không cột
-     * LastActiveAt lạc hậu tới mức job quét tưởng nhầm là học sinh đã rớt mạng.
+     * LastActiveAt lạc hậu tới mức job quét tưởng nhầm là thí sinh đã rớt mạng.
      */
     @Value("${exam.redis.last-active-flush-seconds:30}")
     private long lastActiveFlushSeconds;
@@ -79,12 +79,12 @@ public class ExamRedisService {
     // ── Cache đề thi ────────────────────────────────────────────────────────
 
     /**
-     * Bản đề đã snapshot của một kì thi: nội dung câu hỏi + các lựa chọn, giống
-     * hệt nhau với mọi học sinh nên cache dùng chung được.
+     * Bản đề đã snapshot của một bài thi: nội dung câu hỏi + các lựa chọn, giống
+     * hệt nhau với mọi thí sinh nên cache dùng chung được.
      *
      * Phần riêng của từng em (đã chọn đáp án nào) KHÔNG nằm trong đây — nó được
      * ghép vào sau khi đọc cache. Cache dùng chung mà lẫn dữ liệu cá nhân thì
-     * học sinh này sẽ nhìn thấy bài của học sinh khác.
+     * thí sinh này sẽ nhìn thấy bài của thí sinh khác.
      */
     public Optional<List<ExamQuestionView>> getPaper(Integer examId) {
         try {
@@ -109,8 +109,8 @@ public class ExamRedisService {
     }
 
     /**
-     * Xoá cache đề thi. Gọi ở MỌI chỗ giáo viên đổi cấu trúc đề — thêm câu, gỡ
-     * câu, làm mới snapshot, sửa hoặc xoá đề. Quên một chỗ là học sinh vào thi
+     * Xoá cache đề thi. Gọi ở MỌI chỗ người ra đề đổi cấu trúc đề — thêm câu, gỡ
+     * câu, làm mới snapshot, sửa hoặc xoá đề. Quên một chỗ là thí sinh vào thi
      * còn thấy đề cũ cho tới khi TTL hết.
      */
     public void evictPaper(Integer examId) {
@@ -134,10 +134,10 @@ public class ExamRedisService {
     public enum LockState { ACQUIRED, BUSY, UNAVAILABLE }
 
     /**
-     * Giành quyền tạo phiên cho đúng một cặp (đề, học sinh).
+     * Giành quyền tạo phiên cho đúng một cặp (đề, thí sinh).
      *
      * Trước đây chỗ này khoá bằng SELECT ... FOR UPDATE trên dòng đề thi, tức là
-     * toàn bộ học sinh cùng bấm "Bắt đầu" phải xếp hàng qua một dòng DB duy nhất
+     * toàn bộ thí sinh cùng bấm "Bắt đầu" phải xếp hàng qua một dòng DB duy nhất
      * — đúng lúc vào phòng thi là lúc đông nhất. Khoá Redis hẹp hơn hẳn: hai
      * request của CÙNG một em mới đụng nhau, các em khác vào song song.
      */
@@ -163,10 +163,10 @@ public class ExamRedisService {
         }
     }
 
-    // ── Presence: học sinh còn online hay không ─────────────────────────────
+    // ── Presence: thí sinh còn online hay không ─────────────────────────────
 
     /**
-     * Ghi nhận học sinh vừa có hoạt động. Gọi ở heartbeat, lúc lưu đáp án và lúc
+     * Ghi nhận thí sinh vừa có hoạt động. Gọi ở heartbeat, lúc lưu đáp án và lúc
      * vào / vào lại phòng thi.
      *
      * Key hết hạn sau {@code silenceSeconds} nên bản thân việc key biến mất đã

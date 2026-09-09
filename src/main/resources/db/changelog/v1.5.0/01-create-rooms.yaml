@@ -1,0 +1,223 @@
+databaseChangeLog:
+  # ─────────────────────────────────────────────────────────────────
+  # PHÒNG THI — thay cho Lớp học (revision_plan.md §2)
+  #
+  # Ba bảng mới ở file này. Việc chuyển dữ liệu từ Classes sang và việc
+  # xoá bảng cũ nằm ở hai file riêng (02 và 03), CỐ Ý tách ra: tạo bảng
+  # là an toàn, chuyển dữ liệu là việc cần kiểm lại, còn xoá bảng thì
+  # không lùi được. Gộp cả ba vào một file là tự tước mất cơ hội dừng
+  # lại giữa chừng.
+  #
+  # UserID là VARCHAR(50) vì khoá chính của Users là UUID dạng chuỗi.
+  # ─────────────────────────────────────────────────────────────────
+
+  - changeSet:
+      id: v1.5.0-01-create-rooms
+      author: team
+      comment: "Phòng thi: nhóm rỗng có sức chứa, ai nhanh thì vào."
+      changes:
+        - createTable:
+            tableName: Rooms
+            columns:
+              - column:
+                  name: RoomID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: Name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              # Mã tham gia. Sinh ngẫu nhiên chứ không chạy tuần tự theo RoomID —
+              # mã đoán được thì ai cũng mò vào được phòng của người khác.
+              - column:
+                  name: Code
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: UC_Room_Code
+              - column:
+                  name: OwnerID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_room_owner
+                    references: Users(UserID)
+              - column:
+                  name: LevelID
+                  type: INT
+                  constraints:
+                    foreignKeyName: fk_room_level
+                    references: SubjectLevels(LevelID)
+              # NULL = không giới hạn người.
+              - column:
+                  name: Capacity
+                  type: INT
+              - column:
+                  name: JoinPolicy
+                  type: VARCHAR(20)
+                  defaultValue: CODE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Status
+                  type: VARCHAR(20)
+                  defaultValue: DRAFT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: StartTime
+                  type: DATETIME
+              - column:
+                  name: EndTime
+                  type: DATETIME
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        # "Phòng của tôi" ở màn hình giáo viên
+        - createIndex:
+            tableName: Rooms
+            indexName: idx_room_owner
+            columns:
+              - column:
+                  name: OwnerID
+
+  - changeSet:
+      id: v1.5.0-01-create-room-members
+      author: team
+      comment: >-
+        Thành viên phòng. SeatNo + UNIQUE(RoomID, SeatNo) là chốt chặn cuối
+        của việc "ai nhanh thì vào": hai người không thể nhận cùng một ghế,
+        dù tầng service có sai thế nào.
+      changes:
+        - createTable:
+            tableName: RoomMembers
+            columns:
+              - column:
+                  name: RoomID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_roommember_room
+                    references: Rooms(RoomID)
+                    deleteCascade: true
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_roommember_user
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: SeatNo
+                  type: INT
+                  constraints:
+                    nullable: false
+              # Rời phòng / bị mời ra chỉ đổi cột này, KHÔNG xoá dòng và không
+              # trả lại ghế — xem Javadoc của RoomMember.
+              - column:
+                  name: Status
+                  type: VARCHAR(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: JoinedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: LeftAt
+                  type: DATETIME
+
+        - addPrimaryKey:
+            tableName: RoomMembers
+            columnNames: RoomID, UserID
+            constraintName: PK_RoomMembers
+
+        - addUniqueConstraint:
+            tableName: RoomMembers
+            columnNames: RoomID, SeatNo
+            constraintName: UC_RoomMember_Room_Seat
+
+        # Chiều ngược: "những phòng tôi đang tham gia"
+        - createIndex:
+            tableName: RoomMembers
+            indexName: idx_roommember_user
+            columns:
+              - column:
+                  name: UserID
+
+  - changeSet:
+      id: v1.5.0-01-create-room-exams
+      author: team
+      comment: >-
+        Đề thi đính kèm phòng. Bảng nối này thay cho cột Exams.ClassID cũ,
+        nhờ vậy một đề dùng lại được ở nhiều phòng.
+      changes:
+        - createTable:
+            tableName: RoomExams
+            columns:
+              - column:
+                  name: RoomID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_roomexam_room
+                    references: Rooms(RoomID)
+                    deleteCascade: true
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_roomexam_exam
+                    references: Exams(ExamID)
+                    deleteCascade: true
+              - column:
+                  name: OrderNo
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: AttachedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addPrimaryKey:
+            tableName: RoomExams
+            columnNames: RoomID, ExamID
+            constraintName: PK_RoomExams
+
+        # Chiều ngược: "đề này đang được dùng ở những phòng nào"
+        - createIndex:
+            tableName: RoomExams
+            indexName: idx_roomexam_exam
+            columns:
+              - column:
+                  name: ExamID
+
+  - changeSet:
+      id: v1.5.0-01-exams-is-public
+      author: team
+      comment: >-
+        Cờ đề công khai. Trước đây "đề luyện tập tự do" được nhận ra bằng
+        ClassID IS NULL — một quy ước ngầm, và là quy ước sắp biến mất cùng
+        cột đó. Giờ nói thẳng ra bằng một cột riêng.
+      changes:
+        - addColumn:
+            tableName: Exams
+            columns:
+              - column:
+                  name: IsPublic
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

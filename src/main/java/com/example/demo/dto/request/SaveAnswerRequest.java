@@ -4,9 +4,9 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * Một lần học sinh chọn / sửa đáp án của một câu hỏi.
+ * Một lần thí sinh chọn / sửa đáp án của một câu hỏi.
  *
- * Được gửi ngay khi học sinh bấm chọn, không đợi tới lúc nộp bài. Server lưu
+ * Được gửi ngay khi thí sinh bấm chọn, không đợi tới lúc nộp bài. Server lưu
  * theo kiểu upsert trên (SubmissionID, QuestionID) nên gửi lại nhiều lần cho
  * cùng một câu là an toàn — dòng cũ bị ghi đè, không sinh thêm dòng.
  */

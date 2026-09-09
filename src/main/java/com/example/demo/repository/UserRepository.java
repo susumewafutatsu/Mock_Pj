@@ -18,7 +18,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     boolean existsByEmail(String email);
 
-    /** Tìm student theo email — dùng khi giáo viên thêm học sinh vào lớp */
+    /** Tìm thí sinh theo email. */
     Optional<User> findByEmailAndRole(String email, Role role);
 
     /** Danh sách tất cả student — dùng để gợi ý khi tìm kiếm */

@@ -10,11 +10,11 @@ import com.example.demo.dto.response.HeartbeatResponse;
 import java.util.List;
 
 /**
- * Vòng đời một phiên làm bài của học sinh, từ lúc bắt đầu tới lúc có điểm.
+ * Vòng đời một phiên làm bài của thí sinh, từ lúc bắt đầu tới lúc có điểm.
  *
  * Ba nguyên tắc chi phối toàn bộ interface này:
  *
- * 1. Một học sinh — một đề — một phiên. {@link #startOrResume} không bao giờ
+ * 1. Một thí sinh — một đề — một phiên. {@link #startOrResume} không bao giờ
  *    tạo phiên thứ hai; gọi lại nó là "vào lại phòng thi", không phải "thi lại".
  *    Ràng buộc UNIQUE(ExamID, StudentID) ở DB là chốt cuối.
  *
@@ -31,7 +31,7 @@ public interface SubmissionService {
     /**
      * Vào phòng thi: tạo phiên nếu chưa có, trả lại phiên đang dở nếu đã có.
      *
-     * @throws com.example.demo.exception.BusinessException nếu học sinh đã nộp
+     * @throws com.example.demo.exception.BusinessException nếu thí sinh đã nộp
      *         bài đề này (không cho làm lại), đề chưa mở / đã đóng, hoặc phiên
      *         đang dở đã hết giờ (bài được nộp tự động trước khi báo lỗi).
      */
@@ -42,14 +42,14 @@ public interface SubmissionService {
      * khi mất kết nối". Trả về cả ExpiresAt đã lưu để client tính lại thời gian
      * còn lại theo giờ server.
      *
-     * @throws com.example.demo.exception.ResourceNotFoundException nếu học sinh
+     * @throws com.example.demo.exception.ResourceNotFoundException nếu thí sinh
      *         chưa từng bắt đầu đề này.
      */
     ExamSessionResponse getSession(Integer examId, String studentEmail);
 
     /**
      * Autosave một câu trả lời (upsert theo SubmissionID + QuestionID).
-     * Gọi ngay mỗi lần học sinh chọn đáp án.
+     * Gọi ngay mỗi lần thí sinh chọn đáp án.
      */
     AnswerSavedResponse saveAnswer(Integer examId, SaveAnswerRequest request, String studentEmail);
 
@@ -59,7 +59,7 @@ public interface SubmissionService {
      */
     HeartbeatResponse heartbeat(Integer examId, String studentEmail);
 
-    /** Học sinh chủ động nộp bài. Chấm ngay các câu trắc nghiệm. */
+    /** Thí sinh chủ động nộp bài. Chấm ngay các câu trắc nghiệm. */
     ExamResultResponse submit(Integer examId, SubmitExamRequest request, String studentEmail);
 
     /** Kết quả một bài đã nộp. Chỉ chủ sở hữu bài làm đọc được. */
@@ -67,7 +67,7 @@ public interface SubmissionService {
 
     /**
      * Quét và nộp tự động mọi phiên đã quá ExpiresAt.
-     * Dùng cho trường hợp học sinh đóng máy / mất mạng luôn tới hết giờ, khi đó
+     * Dùng cho trường hợp thí sinh đóng máy / mất mạng luôn tới hết giờ, khi đó
      * không còn request nào từ client để kích hoạt việc nộp bài.
      *
      * @return số bài vừa được nộp tự động
@@ -82,6 +82,6 @@ public interface SubmissionService {
      */
     int flagDisconnectedSessions(long silenceSeconds);
 
-    /** Lịch sử các bài đã làm của học sinh. */
+    /** Lịch sử các bài đã làm của thí sinh. */
     List<ExamResultResponse> getHistory(String studentEmail);
 }
