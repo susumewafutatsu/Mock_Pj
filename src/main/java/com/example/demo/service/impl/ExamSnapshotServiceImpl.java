@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -146,6 +149,9 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
             }
         });
     }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
 
     /** Sao chép toàn bộ đáp án của câu hỏi vào bảng snapshot của đề thi. */
     private void snapshotAnswers(ExamQuestion examQuestion, Question source) {

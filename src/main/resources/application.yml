@@ -49,6 +49,10 @@ spring:
     # LIQUIBASE_CONTEXTS=production trong .env — mọi changeSet mang context
     # "demo" sẽ bị bỏ qua, chỉ còn schema + danh mục dùng chung.
     contexts: ${LIQUIBASE_CONTEXTS:demo}
+    # Bỏ comment dòng dưới (hoặc chạy app với --spring.liquibase.contexts=demo)
+    # để nạp dữ liệu mẫu ở db/changelog/v1.0.3/01-seed-demo-data.yaml.
+    # Không bật context này thì toàn bộ seed bị bỏ qua — schema vẫn tạo bình thường.
+    # contexts: demo
 
   data:
     redis:

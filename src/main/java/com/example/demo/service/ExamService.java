@@ -76,4 +76,15 @@ public interface ExamService {
     PracticeExamsResponse getPracticeExams(Integer levelId, Integer subjectId,
                                            boolean allLevels, int page, int size,
                                            String studentEmail);
+     * Danh sách đề mà học sinh này được làm, kèm trạng thái của riêng em đó
+     * (chưa mở / đang mở / đang làm dở / đã nộp / đã đóng).
+     *
+     * Phạm vi hiển thị: đề của các lớp học sinh có tên trong danh sách, cộng
+     * các đề luyện tập tự do (không gắn lớp). Đề của lớp khác không xuất hiện —
+     * đây là cùng một luật với {@code requireEnrolled} lúc bắt đầu thi, nên
+     * không có đề nào nhìn thấy được mà bấm vào lại bị chặn.
+     *
+     * Không kèm câu hỏi: nội dung đề chỉ mở khi gọi start.
+     */
+    List<ExamResponse> getExamsForStudent(String studentEmail);
 }
