@@ -1,0 +1,117 @@
+databaseChangeLog:
+  # ĐỀ THI THEO CẤU TRÚC JLPT
+
+  - changeSet:
+      id: v1.8.0-01-create-exam-sections
+      author: team
+      comment: "ExamSections: khối thời gian của một đề — tên, thời lượng, thứ tự"
+      changes:
+        - createTable:
+            tableName: ExamSections
+            columns:
+              - column:
+                  name: SectionID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: ExamID
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              # Thời lượng riêng của khối. Hết giờ khối là khoá, sang khối sau.
+              - column:
+                  name: DurationMinutes
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: OrderNo
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addForeignKeyConstraint:
+            constraintName: fk_examsection_exam
+            baseTableName: ExamSections
+            baseColumnNames: ExamID
+            referencedTableName: Exams
+            referencedColumnNames: ExamID
+            onDelete: CASCADE
+
+        - createIndex:
+            indexName: idx_examsection_exam_order
+            tableName: ExamSections
+            columns:
+              - column:
+                  name: ExamID
+              - column:
+                  name: OrderNo
+
+  - changeSet:
+      id: v1.8.0-02-exam-question-section
+      author: team
+      comment: "ExamQuestions.SectionID: câu thuộc khối thời gian nào. NULL = đề phẳng kiểu cũ."
+      changes:
+        - addColumn:
+            tableName: ExamQuestions
+            columns:
+              # Để NULL được, và NULL có nghĩa rõ ràng: đề không chia phần, chạy một đồng hồ duy nhất như trước.
+              - column:
+                  name: SectionID
+                  type: INT
+
+        - addForeignKeyConstraint:
+            constraintName: fk_examquestion_section
+            baseTableName: ExamQuestions
+            baseColumnNames: SectionID
+            referencedTableName: ExamSections
+            referencedColumnNames: SectionID
+            onDelete: SET NULL
+
+  - changeSet:
+      id: v1.8.0-03-question-skill
+      author: team
+      comment: "Kỹ năng JLPT của câu hỏi (文字・語彙 / 文法 / 読解 / 聴解) — nhóm tính điểm quy đổi"
+      changes:
+        - addColumn:
+            tableName: Questions
+            columns:
+              - column:
+                  name: Skill
+                  type: VARCHAR(20)
+        - addColumn:
+            tableName: ExamQuestions
+            columns:
+              # Snapshot y như QuestionType/Content.
+              - column:
+                  name: Skill
+                  type: VARCHAR(20)
+
+  - changeSet:
+      id: v1.8.0-04-exam-jlpt-mode
+      author: team
+      comment: "Exams.JlptScoring: đề này chấm theo thang quy đổi JLPT hay điểm thô"
+      changes:
+        - addColumn:
+            tableName: Exams
+            columns:
+              # Mặc định TẮT. Đề đang có trong hệ thống là đề luyện tập ngắn vài câu.
+              - column:
+                  name: JlptScoring
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

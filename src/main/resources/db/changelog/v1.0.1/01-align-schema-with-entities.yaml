@@ -1,10 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # Đồng bộ schema v1.0.0 với các entity hiện có.
-  # Lý do: application.yml đặt ddl-auto=validate, nên mọi cột mà entity
-  # khai báo nhưng DB không có sẽ làm Hibernate fail lúc khởi động.
-  # Quy ước: tên trong entity là chuẩn, DB được đổi theo.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.0.1-01-align-questionbanks
@@ -21,7 +16,6 @@ databaseChangeLog:
             columnName: Title
             newDataType: VARCHAR(200)
         # modifyDataType của MySQL sinh ra "MODIFY", làm mất NOT NULL cũ.
-        # QuestionBank.title khai báo nullable=false nên khôi phục lại ràng buộc.
         - addNotNullConstraint:
             tableName: QuestionBanks
             columnName: Title

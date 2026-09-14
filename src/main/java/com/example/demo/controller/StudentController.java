@@ -1,14 +1,18 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.request.SaveAnswerRequest;
+import com.example.demo.dto.request.SaveAnswersBatchRequest;
 import com.example.demo.dto.request.SubmitExamRequest;
 import com.example.demo.dto.response.AnswerSavedResponse;
+import com.example.demo.dto.response.AnswersBatchSavedResponse;
 import com.example.demo.dto.response.ApiResponse;
 
 import com.example.demo.dto.response.ExamResponse;
 import com.example.demo.dto.response.ExamResultResponse;
 import com.example.demo.dto.response.ExamSessionResponse;
 import com.example.demo.dto.response.HeartbeatResponse;
+import com.example.demo.dto.response.LeaderboardResponse;
+import com.example.demo.service.LeaderboardService;
 import com.example.demo.dto.response.PracticeExamsResponse;
 import com.example.demo.dto.response.StudentExamBoardResponse;
 import com.example.demo.service.ExamService;
@@ -29,25 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Phòng thi của thí sinh.
- *
- * Tìm đề — ba lối vào cho ba màn hình khác nhau:
- *   GET    /exams                   -> trang chủ: đề nhóm theo phòng thi + gợi ý đề luyện tập
- *   GET    /rooms/{id}/exams        -> toàn bộ đề của một phòng
- *   (danh sách phòng đang tham gia nằm ở GET /api/rooms/joined)
- *   GET    /practice-exams          -> đề luyện tập tự do, kèm bộ lọc trình độ
- *
- * Thứ tự client gọi trong một phiên làm bài bình thường:
- *   POST   /exams/{id}/start        -> lấy đề + expiresAt (gọi lại = vào lại, không tạo phiên mới)
- *   PUT    /exams/{id}/answers      -> mỗi lần chọn đáp án, gọi ngay (autosave)
- *   POST   /exams/{id}/heartbeat    -> 15-30 giây một lần, để server biết còn sống
- *   POST   /exams/{id}/submit       -> nộp bài
- *   GET    /submissions/{id}/result -> xem điểm
- *
- * Sau khi mất mạng, client gọi GET /exams/{id}/session để lấy lại toàn bộ đáp án
- * đã lưu và thời gian còn lại tính theo giờ server.
- */
+/** Phòng thi của thí sinh. */
 @RestController
 @RequestMapping("/api/student")
 @RequiredArgsConstructor
@@ -55,40 +41,23 @@ public class StudentController {
 
     private final SubmissionService submissionService;
     private final ExamService examService;
+    private final LeaderboardService leaderboardService;
 
 
-    /**
-     * Trang chủ: đề của từng phòng thi (đã nhóm sẵn) cộng một phần gợi ý đề luyện tập.
-     *
-     * Bản trước trả một danh sách phẳng trộn cả hai loại đề — xem
-     * {@link ExamService} để biết vì sao đã tách ra.
-     *
-     * Không trả câu hỏi — nội dung đề chỉ mở ra ở endpoint start.
-     */
+    /** Trang chủ: đề của từng phòng thi (đã nhóm sẵn) cộng một phần gợi ý đề luyện tập. */
     @GetMapping("/exams")
     public ApiResponse<StudentExamBoardResponse> examBoard(@AuthenticationPrincipal UserDetails me) {
         return ApiResponse.success(examService.getExamBoard(me.getUsername()));
     }
 
-    /**
-     * Toàn bộ bài thi của một phòng. Trả 404 nếu thí sinh không ở trong phòng đó — không tiết
-     * lộ phòng có tồn tại hay không cho người ngoài.
-     */
+    /** Toàn bộ bài thi của một phòng. */
     @GetMapping("/rooms/{roomId}/exams")
     public ApiResponse<List<ExamResponse>> roomExams(@PathVariable Integer roomId,
                                                      @AuthenticationPrincipal UserDetails me) {
         return ApiResponse.success(examService.getRoomExams(roomId, me.getUsername()));
     }
 
-    /**
-     * Một trang đề luyện tập tự do, kèm bộ lọc theo trình độ / môn học.
-     *
-     * Không truyền bộ lọc thì server chọn hộ một trình độ theo phòng thí sinh đang
-     * học và bật cờ {@code filteredByEnrolledLevels}, để client hiện được lối
-     * thoát "xem tất cả trình độ".
-     *
-     * {@code page} đánh số từ 0. {@code size} bị server kẹp về khoảng cho phép.
-     */
+    /** Một trang đề luyện tập tự do, kèm bộ lọc theo trình độ / môn học. */
     @GetMapping("/practice-exams")
     public ApiResponse<PracticeExamsResponse> practiceExams(
             @RequestParam(required = false) Integer levelId,
@@ -101,9 +70,7 @@ public class StudentController {
                 levelId, subjectId, allLevels, page, size, me.getUsername()));
     }
 
-    // Danh sách phòng thí sinh đang tham gia nằm ở GET /api/rooms/joined —
-    // xem RoomController. Phòng thi là nơi hai vai gặp nhau nên nó có
-    // controller riêng, không nhân đôi thành hai bản gần giống nhau ở đây.
+    // Danh sách phòng thí sinh đang tham gia nằm ở GET /api/rooms/joined — xem RoomController.
 
     @PostMapping("/exams/{examId}/start")
     public ApiResponse<ExamSessionResponse> start(@PathVariable Integer examId,
@@ -127,6 +94,23 @@ public class StudentController {
         return ApiResponse.success(submissionService.saveAnswer(examId, request, me.getUsername()));
     }
 
+    /** Đường lưu chính của phòng thi: client ghi đáp án vào localStorage trước, rồi đẩy cả lô lên theo nhịp. */
+    @PutMapping("/exams/{examId}/answers/batch")
+    public ApiResponse<AnswersBatchSavedResponse> saveAnswers(@PathVariable Integer examId,
+                                                             @Valid @RequestBody SaveAnswersBatchRequest request,
+                                                             @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(submissionService.saveAnswers(examId, request, me.getUsername()));
+    }
+
+    /** Xin phép phát file nghe của một câu; server đếm và chặn khi hết lượt. */
+    @PostMapping("/exams/{examId}/questions/{questionId}/audio-play")
+    public ApiResponse<com.example.demo.dto.response.AudioPlayResponse> audioPlay(
+            @PathVariable Integer examId,
+            @PathVariable Integer questionId,
+            @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(submissionService.recordAudioPlay(examId, questionId, me.getUsername()));
+    }
+
     @PostMapping("/exams/{examId}/heartbeat")
     public ApiResponse<HeartbeatResponse> heartbeat(@PathVariable Integer examId,
                                                     @AuthenticationPrincipal UserDetails me) {
@@ -141,6 +125,13 @@ public class StudentController {
         ExamResultResponse result = submissionService.submit(examId, request, me.getUsername());
         return ApiResponse.success(result.isAutoSubmitted()
                 ? "Hết giờ, bài đã được nộp tự động" : "Đã nộp bài", result);
+    }
+
+    /** Bảng xếp hạng của một đề tự do: tốp đầu + vị trí của chính mình. */
+    @GetMapping("/exams/{examId}/leaderboard")
+    public ApiResponse<LeaderboardResponse> leaderboard(@PathVariable Integer examId,
+                                                        @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(leaderboardService.examLeaderboard(me.getUsername(), examId));
     }
 
     @GetMapping("/submissions/{submissionId}/result")

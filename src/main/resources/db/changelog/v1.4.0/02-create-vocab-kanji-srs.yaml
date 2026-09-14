@@ -1,20 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # TỪ VỰNG · KANJI · BỘ THẺ · LỊCH LẶP LẠI NGẮT QUÃNG (SRS) — §3.4(b)
-  #
-  # Đây là nghiệp vụ HỌC, tách hẳn khỏi nghiệp vụ THI. Không có bảng nào
-  # ở đây dính tới Exams/Submissions: học thuộc từ vựng là việc diễn ra
-  # hằng ngày, không cần và không nên đi qua một phiên thi.
-  #
-  # Vì sao cần SRS chứ không phải một danh sách từ để đọc lại: học JLPT
-  # về bản chất là thuộc 800 (N5) đến 10.000 (N1) từ. Đọc lại cả danh
-  # sách mỗi ngày là bất khả thi; thuật toán giãn cách chọn ra đúng những
-  # thẻ sắp quên để ôn hôm nay. Toàn bộ trạng thái đó nằm ở UserCardStates.
-  #
-  # Ghi chú về tên cột Glyph (thay vì Character): CHARACTER là từ khoá
-  # dành riêng của MySQL, đặt tên cột như vậy là phải quote ở mọi câu
-  # lệnh. Đổi tên rẻ hơn nhiều so với việc nhớ quote mãi mãi.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.4.0-02-create-vocab-items
@@ -37,8 +22,7 @@ databaseChangeLog:
                   type: VARCHAR(100)
                   constraints:
                     nullable: false
-              # Cách đọc bằng kana. Luôn bắt buộc — kể cả khi Word đã là kana,
-              # vì màn ôn thẻ và phần so đáp án gõ tay đều dựa vào cột này.
+              # Cách đọc bằng kana. Luôn bắt buộc.
               - column:
                   name: Reading
                   type: VARCHAR(100)
@@ -64,8 +48,7 @@ databaseChangeLog:
               - column:
                   name: ExampleMeaning
                   type: VARCHAR(500)
-              # Audio phát trong màn ôn thẻ. Khác đề nghe của phần thi: thẻ
-              # không giới hạn số lần phát, học thì nghe bao nhiêu lần cũng được.
+              # Audio phát trong màn ôn thẻ.
               - column:
                   name: AudioURL
                   type: VARCHAR(255)
@@ -74,9 +57,7 @@ databaseChangeLog:
                   type: DATETIME
                   defaultValueComputed: CURRENT_TIMESTAMP
 
-        # Cùng một chữ viết có thể có hai cách đọc mang nghĩa khác nhau
-        # (今日 = きょう "hôm nay" / こんにち "ngày nay"), nên khoá là cặp
-        # Word + Reading chứ không riêng Word.
+        # Cùng một chữ viết có thể có hai cách đọc mang nghĩa khác nhau (今日 = きょう "hôm nay" / こんにち "ngày nay")
         - addUniqueConstraint:
             tableName: VocabItems
             columnNames: Word, Reading
@@ -104,8 +85,7 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-              # Một chữ Hán, nhưng để VARCHAR(8) chứ không phải (1): vài chữ
-              # nằm ngoài mặt phẳng cơ bản của Unicode chiếm nhiều hơn một đơn vị.
+              # Một chữ Hán, nhưng để VARCHAR(8) chứ không phải (1)
               - column:
                   name: Glyph
                   type: VARCHAR(8)
@@ -281,10 +261,7 @@ databaseChangeLog:
                   type: INT
                   constraints:
                     nullable: false
-              # Hệ số dễ của SM-2. Bắt đầu 2.50, không bao giờ xuống dưới 1.30.
-              # Thẻ khó bị kéo hệ số xuống nên khoảng cách ôn giãn ra chậm hơn.
-              # DECIMAL(4,2) là đủ chính xác: mọi bước điều chỉnh của SM-2
-              # (-0.14 / 0 / +0.10) đều tròn hai chữ số thập phân.
+              # Hệ số dễ của SM-2. Bắt đầu 2.50.
               - column:
                   name: EaseFactor
                   type: DECIMAL(4,2)

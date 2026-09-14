@@ -11,10 +11,7 @@ import java.util.function.Function;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-/**
- * Bao phân trang dùng chung cho các API trả về danh sách.
- * Không serialize trực tiếp {@link Page} vì cấu trúc JSON của nó không ổn định giữa các version Spring.
- */
+/** Bao phân trang dùng chung cho các API trả về danh sách. */
 @Data
 @Builder
 @NoArgsConstructor

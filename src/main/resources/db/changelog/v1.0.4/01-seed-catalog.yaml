@@ -1,28 +1,11 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # DỮ LIỆU DANH MỤC DÙNG CHUNG — CHẠY MẶC ĐỊNH (không có context).
-  #
-  # Khác v1.0.3 (dữ liệu mẫu, chỉ nạp khi bật context "demo"): file này
-  # nạp cho MỌI người trong team để ai clone repo cũng có sẵn cùng một
-  # bộ môn học / trình độ, không phải tự thêm tay và không lệch LevelID
-  # giữa các máy.
-  #
-  # Vì sao phải seed: tạo lớp (POST /api/teacher/classes) và tạo đề thi
-  # (POST /api/teacher/exams) đều bắt buộc LevelID có thật, mà màn hình
-  # admin để khai môn học / trình độ thì chưa làm. Seed ở đây là chỗ
-  # thay thế cho màn hình đó cho tới khi nó có.
-  #
-  # ID cố định trong dải 1..99 để mọi máy trong team dùng cùng con số
-  # (dải 9001+ đã thuộc dữ liệu demo). Khi giáo viên tự thêm môn mới qua
-  # UI về sau, AUTO_INCREMENT tiếp tục từ số lớn nhất nên không đụng nhau.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.0.4-01-seed-subject-japanese
       author: team
       comment: "Môn Tiếng Nhật — môn học chính của hệ thống."
-      # Máy nào đã tự thêm tay môn/ID này trước đó thì bỏ qua changeSet cho khỏi
-      # vướng UNIQUE(SubjectName) hoặc trùng khoá chính, không làm app fail lúc khởi động.
+      # Máy nào đã tự thêm tay môn/ID này trước đó thì bỏ qua changeSet cho khỏi vướng UNIQUE(SubjectName) hoặc trùng khoá chính, không làm app fail lúc khởi động.
       preConditions:
         - onFail: MARK_RAN
         - sqlCheck:
@@ -44,8 +27,7 @@ databaseChangeLog:
       id: v1.0.4-01-seed-jlpt-levels
       author: team
       comment: "5 trình độ JLPT N5→N1 của môn Tiếng Nhật. DisplayOrder xếp từ dễ đến khó."
-      # Chỉ nạp khi môn Tiếng Nhật là đúng bản seed ở trên (SubjectID = 1) và
-      # chưa có trình độ nào trong dải 1..5, tránh trùng UC_Subject_Level.
+      # Chỉ nạp khi môn Tiếng Nhật là đúng bản seed ở trên (SubjectID = 1) và chưa có trình độ nào trong dải 1..5.
       preConditions:
         - onFail: MARK_RAN
         - sqlCheck:

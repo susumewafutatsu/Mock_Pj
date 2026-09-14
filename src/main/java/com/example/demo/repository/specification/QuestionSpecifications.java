@@ -15,13 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * Các điều kiện lọc câu hỏi, ghép động bằng Specification.
- * <p>
- * Điều kiện tag dùng EXISTS subquery thay vì JOIN trực tiếp: nếu JOIN bảng QuestionTags
- * thì một câu hỏi có N tag khớp sẽ bị trả về N lần, và {@code DISTINCT} kết hợp với
- * {@code LIMIT/OFFSET} của phân trang sẽ cho ra tổng số bản ghi sai.
- */
+/** Các điều kiện lọc câu hỏi, ghép động bằng Specification. */
 public final class QuestionSpecifications {
 
     private QuestionSpecifications() {

@@ -10,11 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Danh mục dùng chung cho các form của người ra đề (tạo phòng thi, tạo ngân hàng câu
- * hỏi, tạo đề thi)
- * Base path: /api/teacher
- */
+/** Danh mục dùng chung cho các form của người ra đề (tạo phòng thi, tạo ngân hàng câu hỏi, tạo đề thi) Base path. */
 @RestController
 @RequestMapping("/api/teacher")
 @RequiredArgsConstructor
@@ -22,10 +18,7 @@ public class TeacherCatalogController {
 
     private final SubjectLevelService subjectLevelService;
 
-    /**
-     * GET /api/teacher/levels
-     * Toàn bộ trình độ kèm tên môn học.
-     */
+    /** GET /api/teacher/levels Toàn bộ trình độ kèm tên môn học. */
     @GetMapping("/levels")
     public ApiResponse<List<SubjectLevelResponse>> listLevels() {
         return ApiResponse.success(subjectLevelService.listAll());

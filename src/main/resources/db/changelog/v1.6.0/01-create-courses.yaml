@@ -1,20 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # KHOÁ HỌC — revision_plan.md §3.4(c)
-  #
-  # Cố ý ĐƠN GIẢN. Một khoá học là danh sách bài học có thứ tự; một bài
-  # học là một khối lý thuyết để đọc. Đọc xong bấm Hoàn thành, tiến độ
-  # tính bằng số bài xong chia tổng số bài. Không có khối nội dung ghép,
-  # không đo thời gian đọc, không có trạng thái "đang đọc dở".
-  #
-  # Vì sao có bảng này khi đã có bộ thẻ (v1.4.0): thẻ lật chỉ hợp với từ
-  # vựng. Ngữ pháp cần một trang giải thích cấu trúc, cách nối và sắc
-  # thái; chữ Hán cần mặt chữ, âm On/Kun, bộ thủ và từ ghép. Cả hai thứ
-  # đó không nhét vào mặt sau một tấm thẻ được.
-  #
-  # Quyền: người ra đề soạn (DRAFT) → gửi duyệt (PENDING) → Admin duyệt
-  # (PUBLISHED) hoặc từ chối (REJECTED). Xem CourseStatus.java.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.6.0-01-create-courses
@@ -60,8 +45,7 @@ databaseChangeLog:
                   defaultValue: DRAFT
                   constraints:
                     nullable: false
-              # Ai duyệt, lúc nào, và vì sao từ chối. Ghi lại để tác giả biết
-              # phải sửa gì, và để về sau còn truy được ai đã cho qua nội dung nào.
+              # Ai duyệt, lúc nào, và vì sao từ chối.
               - column:
                   name: ReviewedBy
                   type: VARCHAR(50)
@@ -91,8 +75,7 @@ databaseChangeLog:
               - column:
                   name: AuthorID
 
-        # Hai truy vấn nóng: hàng đợi duyệt của Admin (status = PENDING) và
-        # danh sách khoá cho thí sinh (status = PUBLISHED, lọc theo trình độ).
+        # Hai truy vấn nóng: hàng đợi duyệt của Admin (status = PENDING) và danh sách khoá cho thí sinh (status = PUBLISHED, lọc theo trình độ).
         - createIndex:
             tableName: Courses
             indexName: idx_course_status_level
@@ -139,25 +122,21 @@ databaseChangeLog:
                   type: VARCHAR(200)
                   constraints:
                     nullable: false
-              # GRAMMAR | KANJI | VOCAB | READING | LISTENING — quyết định cách
-              # hiển thị, không phải nhãn trang trí. Xem LessonType.java.
+              # GRAMMAR | KANJI | VOCAB | READING | LISTENING — quyết định cách hiển thị, không phải nhãn trang trí.
               - column:
                   name: LessonType
                   type: VARCHAR(20)
                   defaultValue: GRAMMAR
                   constraints:
                     nullable: false
-              # Lý thuyết để đọc. LONGTEXT vì một bài ngữ pháp tử tế có cấu trúc,
-              # cách nối, sắc thái, vài câu ví dụ và phần lỗi thường gặp.
+              # Lý thuyết để đọc. LONGTEXT vì một bài ngữ pháp tử tế có cấu trúc, cách nối, sắc thái.
               - column:
                   name: Content
                   type: LONGTEXT
               - column:
                   name: EstimatedMinutes
                   type: INT
-              # Bộ thẻ ôn kèm. ĐỂ TRỐNG ĐƯỢC: bài ngữ pháp thường chẳng cần thẻ
-              # nào, còn bài từ vựng thì gắn để ôn lại sau khi đọc. Bộ thẻ là
-              # công cụ ôn, không phải thứ thay cho bài học.
+              # Bộ thẻ ôn kèm. ĐỂ TRỐNG ĐƯỢC: bài ngữ pháp thường chẳng cần thẻ nào.
               - column:
                   name: DeckID
                   type: INT

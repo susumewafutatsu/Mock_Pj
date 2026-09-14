@@ -1,27 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # Nhiều lượt làm bài, và xem lại bài đã làm.
-  #
-  # Tới v1.0.2, hệ thống đóng cứng ở giả định "một học sinh — một đề —
-  # một phiên", chốt bằng UNIQUE(ExamID, StudentID). Giả định đó đúng
-  # với bài kiểm tra, nhưng sai với phần lớn nội dung của một nền tảng
-  # ôn thi: đề luyện tập sinh ra để làm đi làm lại.
-  #
-  # Ba thay đổi:
-  #
-  #   1. Exams.MaxAttempts — số lượt tối đa. NULL = không giới hạn.
-  #      Giáo viên đặt lúc tạo đề.
-  #
-  #   2. ExamSubmissions.AttemptNumber + đổi UNIQUE thành
-  #      (ExamID, StudentID, AttemptNumber). Vẫn là chốt cuối ở tầng DB
-  #      chống double-click / nhiều tab sinh phiên trùng — chỉ khác là
-  #      giờ nó chống trùng TRONG MỘT LƯỢT thay vì chống mọi lượt thứ hai.
-  #
-  #   3. Exams.AllowReview — cho học sinh xem đáp án đúng + giải thích
-  #      sau khi nộp hay không. Mặc định bật, vì với đề ôn tập thì phần
-  #      giải thích chính là chỗ học sinh học được; giáo viên tắt nó khi
-  #      ra đề kiểm tra thật, hoặc khi đề còn đang mở cho lớp khác làm.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.2.0-01-exams-attempt-and-review-columns

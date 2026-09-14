@@ -1,5 +1,6 @@
 package com.example.demo.dto.response;
 
+import com.example.demo.domain.enums.JlptSkill;
 import com.example.demo.domain.enums.QuestionType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,14 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Câu hỏi nhìn từ phía thí sinh đang làm bài, kèm phần đã trả lời (nếu có).
- *
- * Nội dung lấy từ snapshot của đề thi, không đọc ngân hàng câu hỏi — người ra đề
- * sửa câu hỏi giữa lúc thí sinh đang thi cũng không làm đề đổi nội dung.
- * Phần {@code selectedSnapshotAnswerId} / {@code essayResponse} chính là thứ
- * giúp thí sinh mất mạng quay lại thấy đúng những gì mình đã chọn.
- */
+/** Câu hỏi nhìn từ phía thí sinh đang làm bài, kèm phần đã trả lời (nếu có). */
 @Data
 @Builder
 @NoArgsConstructor
@@ -30,6 +24,23 @@ public class ExamQuestionView {
     private String content;
     private QuestionType questionType;
     private List<ExamOptionView> options;
+
+    /** Phần thi chứa câu này. null = đề không chia phần, một đồng hồ duy nhất. */
+    private Integer sectionId;
+
+    /** Kỹ năng JLPT — phòng thi dùng để nhóm và để hiện nhãn 文法 / 読解… */
+    private JlptSkill skill;
+
+    /** Bài đọc mà câu này hỏi về. */
+    private Integer passageId;
+    private String passageTitle;
+    private String passageContent;
+
+    /** File nghe (聴解). Client KHÔNG phát thẳng. */
+    private String audioUrl;
+    private Integer maxAudioPlays;
+    /** Số lượt đã nghe trong lượt làm này. */
+    private Integer audioPlays;
 
     // ── Phần thí sinh đã làm, phục hồi từ SubmissionDetails ────────────────
     private Integer selectedSnapshotAnswerId;

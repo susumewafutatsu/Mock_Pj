@@ -1,0 +1,45 @@
+databaseChangeLog:
+  # DẠNG CÂU HỎI THEO JLPT
+
+  - changeSet:
+      id: v1.8.0-07-drop-matching
+      author: team
+      comment: "Chuyển câu MATCHING còn sót thành MULTIPLE_CHOICE (vốn đã được chấm như vậy)"
+      changes:
+        # Chuyển dữ liệu trước, để enum phía Java bỏ hằng MATCHING mà không có
+        # dòng nào đọc lên thành giá trị không hợp lệ.
+        - update:
+            tableName: Questions
+            columns:
+              - column:
+                  name: QuestionType
+                  value: "MULTIPLE_CHOICE"
+            where: "QuestionType = 'MATCHING'"
+        - update:
+            tableName: ExamQuestions
+            columns:
+              - column:
+                  name: QuestionType
+                  value: "MULTIPLE_CHOICE"
+            where: "QuestionType = 'MATCHING'"
+
+  - changeSet:
+      id: v1.8.0-08-seed-jlpt-skill-v2
+      author: team
+      comment: "Đoán kỹ năng cho câu hỏi cũ theo tên ngân hàng; không đoán được thì để trống"
+      changes:
+        # Đoán theo tên ngân hàng là cách rẻ nhất để dữ liệu cũ có ích ngay, và cũng đủ an toàn.
+        - sql:
+            splitStatements: false
+            sql: |
+              UPDATE Questions q
+                JOIN QuestionBanks b ON b.BankID = q.BankID
+                 SET q.Skill = CASE
+                       WHEN b.Title LIKE '%Nghe%'     OR b.Title LIKE '%聴解%' THEN 'LISTENING'
+                       WHEN b.Title LIKE '%Đọc%'      OR b.Title LIKE '%読解%' THEN 'READING'
+                       WHEN b.Title LIKE '%Ngữ pháp%' OR b.Title LIKE '%文法%' THEN 'GRAMMAR'
+                       WHEN b.Title LIKE '%Từ vựng%'  OR b.Title LIKE '%語彙%'
+                         OR b.Title LIKE '%Chữ Hán%'  OR b.Title LIKE '%漢字%' THEN 'VOCABULARY'
+                       ELSE NULL
+                     END
+               WHERE q.Skill IS NULL

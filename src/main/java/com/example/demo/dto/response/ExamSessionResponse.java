@@ -7,15 +7,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Trạng thái đầy đủ của một phiên làm bài. Trả về cho cả lúc bắt đầu thi và
- * lúc quay lại sau khi mất kết nối — hai luồng dùng cùng một payload, nên
- * client không cần code riêng cho trường hợp "vào lại".
- *
- * Về đồng hồ: client đếm ngược theo {@code remainingSeconds}, và có thể tự
- * hiệu chỉnh lệch giờ bằng cặp {@code serverTime} / {@code expiresAt}. Không
- * bao giờ tính thời gian còn lại từ giờ máy của thí sinh.
- */
+/** Trạng thái đầy đủ của một phiên làm bài. */
 @Data
 @Builder
 public class ExamSessionResponse {
@@ -56,4 +48,7 @@ public class ExamSessionResponse {
     private int answeredQuestions;
 
     private List<ExamQuestionView> questions;
+
+    /** Các phần thi, theo thứ tự. */
+    private List<ExamSectionView> sections;
 }

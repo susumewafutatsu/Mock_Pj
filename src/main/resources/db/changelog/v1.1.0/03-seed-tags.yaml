@@ -1,15 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
-  # DỮ LIỆU MẪU CHO TAG — context "demo", đi cùng bộ câu hỏi 9001..9010
-  # mà v1.0.3 đã seed. Không có file này thì API tìm kiếm theo tag
-  # (GET /api/v1/questions) luôn trả về rỗng, không test được gì.
-  #
-  # TagID trong dải 9001+ giống quy ước của v1.0.3 / v1.0.5, để không
-  # đụng tag thật do giáo viên tự tạo qua UI về sau.
-  #
-  # TagName luôn là slug chữ thường (xem chú thích trong Tag.java) để so
-  # sánh không phụ thuộc hoa/thường.
-  # ─────────────────────────────────────────────────────────────────
+  # DỮ LIỆU MẪU CHO TAG — context "demo", đi cùng bộ câu hỏi 9001..9010 mà v1.0.3 đã seed.
 
   - changeSet:
       id: v1.1.0-03-seed-tags

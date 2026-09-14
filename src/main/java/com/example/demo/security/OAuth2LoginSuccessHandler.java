@@ -17,10 +17,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 
-/**
- * Google xác thực thành công → phát JWT của hệ thống rồi redirect về frontend
- * kèm token trong query string: {redirectUri}?accessToken=...&refreshToken=...&role=...
- */
+/** Google xác thực thành công → phát JWT của hệ thống rồi redirect về frontend kèm token trong query string. */
 @Component
 @RequiredArgsConstructor
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
@@ -28,6 +25,9 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
     private final JwtUtils jwtUtils;
     private final UserRepository userRepository;
     private final HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private RefreshTokenCookie refreshTokenCookie;
+
 
     @Value("${app.oauth2.default-redirect-uri}")
     private String defaultRedirectUri;
@@ -68,11 +68,11 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 .orElseThrow(() -> new IllegalStateException("Không tìm thấy user sau khi đăng nhập Google: " + email));
 
         String accessToken = jwtUtils.generateToken(user.getEmail(), "ROLE_" + user.getRole().name());
-        String refreshToken = jwtUtils.generateRefreshToken(user.getEmail());
+        // Refresh token đi bằng cookie HttpOnly, KHÔNG nằm trên URL.
+        refreshTokenCookie.write(response, jwtUtils.generateRefreshToken(user.getEmail()));
 
         return UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("accessToken", accessToken)
-                .queryParam("refreshToken", refreshToken)
                 .queryParam("role", user.getRole().name())
                 .build()
                 .toUriString();

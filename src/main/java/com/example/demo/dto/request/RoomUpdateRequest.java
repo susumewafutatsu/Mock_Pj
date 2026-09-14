@@ -2,6 +2,7 @@ package com.example.demo.dto.request;
 
 import com.example.demo.domain.enums.JoinPolicy;
 import com.example.demo.domain.enums.RoomStatus;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -10,12 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Sửa phòng. Trường nào để null thì giữ nguyên giá trị cũ.
- *
- * Mã phòng KHÔNG sửa được: người ra đề đã đọc mã đó cho cả phòng, đổi giữa
- * chừng là cắt đường vào của những người còn đang gõ.
- */
+/** Sửa phòng. Trường null thì giữ nguyên. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -23,6 +19,9 @@ public class RoomUpdateRequest {
 
     @Size(max = 100, message = "Tên phòng tối đa 100 ký tự")
     private String name;
+
+    /** Đổi đề của buổi thi (chỉ trước khi bắt đầu). */
+    private Integer examId;
 
     private Integer levelId;
 
@@ -33,7 +32,19 @@ public class RoomUpdateRequest {
 
     private RoomStatus status;
 
+    /** Hẹn giờ bắt đầu làm bài. */
     private LocalDateTime startTime;
 
     private LocalDateTime endTime;
+
+    /** true = bỏ giờ hẹn. */
+    private Boolean clearStartTime;
+
+    @Min(value = 0, message = "Số phút cho vào muộn không được âm")
+    @Max(value = 180, message = "Số phút cho vào muộn tối đa 180")
+    private Integer lateJoinMinutes;
+
+    /** Chuỗi rỗng = xoá lời dặn. */
+    @Size(max = 2000, message = "Lời dặn tối đa 2000 ký tự")
+    private String instructions;
 }

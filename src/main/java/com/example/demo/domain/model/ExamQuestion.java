@@ -1,5 +1,6 @@
 package com.example.demo.domain.model;
 
+import com.example.demo.domain.enums.JlptSkill;
 import com.example.demo.domain.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,14 +10,7 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Liên kết đề thi - câu hỏi, đồng thời là bản đóng băng (snapshot) của câu hỏi
- * tại thời điểm được đưa vào đề.
- *
- * Đề thi KHÔNG đọc nội dung từ {@link Question} nữa. Nhờ vậy người ra đề sửa câu
- * hỏi trong ngân hàng bao nhiêu lần cũng không làm sai lệch bài đã nộp.
- * Quan hệ tới {@code question} chỉ còn để truy vết nguồn gốc và thống kê.
- */
+/** Liên kết đề thi - câu hỏi, đồng thời là bản đóng băng (snapshot) của câu hỏi tại thời điểm được đưa vào đề. */
 @Entity
 @Table(name = "ExamQuestions")
 @Getter
@@ -46,16 +40,14 @@ public class ExamQuestion {
     @Builder.Default
     private BigDecimal points = new BigDecimal("1.00");
 
-    // ── Snapshot ───────────────────────────────────────────────────────────
-    // Null với các dòng tạo trước migration v1.0.1; dùng resolveContent().
+    // Snapshot Null với các dòng tạo trước migration v1.0.1; dùng resolveContent().
 
     // LONGVARCHAR khớp LONGTEXT của changelog (xem chú thích trong Answer)
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "QuestionContent")
     private String questionContent;
 
-    // Hibernate 6.4 map @Enumerated(STRING) sang kiểu ENUM riêng của MySQL,
-    // còn changelog khai báo VARCHAR(20). Ép VARCHAR để validate không lệch.
+    // Hibernate 6.4 map @Enumerated(STRING) sang kiểu ENUM riêng của MySQL, còn changelog khai báo VARCHAR(20).
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "QuestionType", length = 20)
@@ -68,8 +60,37 @@ public class ExamQuestion {
     @Column(name = "Explanation")
     private String explanation;
 
+    /** Kỹ năng JLPT tại lúc ra đề. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "Skill", length = 20)
+    private JlptSkill skill;
+
+    /** Đoạn văn đã chụp lại. {@code passageId} giữ để phòng thi biết những câu nào cùng một bài đọc và chỉ hiện đoạn văn một lần cho cả nhóm. */
+    @Column(name = "PassageID")
+    private Integer passageId;
+
+    @Column(name = "PassageTitle", length = 200)
+    private String passageTitle;
+
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
+    @Column(name = "PassageContent")
+    private String passageContent;
+
+    /** Snapshot file nghe và giới hạn lượt nghe tại lúc ra đề. */
+    @Column(name = "AudioUrl", length = 255)
+    private String audioUrl;
+
+    @Column(name = "MaxAudioPlays")
+    private Integer maxAudioPlays;
+
     @Column(name = "SnapshotAt")
     private LocalDateTime snapshotAt;
+
+    /** Khối thời gian chứa câu này. NULL = đề phẳng, một đồng hồ duy nhất. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "SectionID")
+    private ExamSection section;
 
     /** Sao chép trạng thái hiện tại của câu hỏi vào đề thi này. */
     public void captureFrom(Question source) {
@@ -77,6 +98,18 @@ public class ExamQuestion {
         this.questionType = source.getQuestionType();
         this.difficultyLevel = source.getDifficultyLevel();
         this.explanation = source.getExplanation();
+        this.skill = source.getSkill();
+        this.audioUrl = source.getAudioUrl();
+        this.maxAudioPlays = source.getMaxAudioPlays();
+        if (source.getPassage() != null) {
+            this.passageId = source.getPassage().getPassageId();
+            this.passageTitle = source.getPassage().getTitle();
+            this.passageContent = source.getPassage().getContent();
+        } else {
+            this.passageId = null;
+            this.passageTitle = null;
+            this.passageContent = null;
+        }
         this.snapshotAt = LocalDateTime.now();
     }
 
@@ -91,5 +124,22 @@ public class ExamQuestion {
 
     public boolean hasSnapshot() {
         return snapshotAt != null;
+    }
+
+    /** Số lần được nghe; mặc định 1 như JLPT. */
+    public int resolveMaxAudioPlays() {
+        Integer value = maxAudioPlays != null ? maxAudioPlays
+                : (question != null ? question.getMaxAudioPlays() : null);
+        return value == null || value < 1 ? 1 : value;
+    }
+
+    public String resolveAudioUrl() {
+        return audioUrl != null ? audioUrl : (question != null ? question.getAudioUrl() : null);
+    }
+
+    /** Kỹ năng hiển thị/tính điểm: ưu tiên snapshot, fallback câu hỏi gốc. */
+    public JlptSkill resolveSkill() {
+        return skill != null ? skill
+                : (question != null ? question.getSkill() : null);
     }
 }

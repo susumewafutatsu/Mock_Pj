@@ -13,10 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Tham số lọc / tìm kiếm câu hỏi cho GET /api/v1/questions/search.
- * Mọi field đều optional — field nào null/rỗng thì bỏ qua điều kiện tương ứng.
- */
+/** Tham số lọc / tìm kiếm câu hỏi cho GET /api/v1/questions/search. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -53,10 +50,7 @@ public class QuestionSearchRequest {
 
     private Boolean isAiGenerated;
 
-    /**
-     * Chuẩn hoá danh sách tag: trim, lowercase, bỏ rỗng, bỏ trùng, giữ nguyên thứ tự.
-     * Trả về set rỗng nếu không có tag nào hợp lệ.
-     */
+    /** Chuẩn hoá danh sách tag: trim, lowercase, bỏ rỗng, bỏ trùng, giữ nguyên thứ tự. */
     public Set<String> normalizedTags() {
         Set<String> result = new LinkedHashSet<>();
         if (tag == null) {

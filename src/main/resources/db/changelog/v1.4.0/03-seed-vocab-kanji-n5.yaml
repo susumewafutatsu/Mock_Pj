@@ -1,30 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # NỘI DUNG HỌC N5 — CHẠY MẶC ĐỊNH (không có context "demo").
-  #
-  # Khác các file seed dữ liệu mẫu: đây KHÔNG phải dữ liệu để test mà là
-  # nội dung học thật của sản phẩm, giống bộ môn học / trình độ ở v1.0.4.
-  # Bắt giáo viên gõ tay 800 từ N5 qua UI là chuyện không xảy ra, nên
-  # nội dung nền phải đi kèm hệ thống.
-  #
-  # ID cố định trong dải 1..999 để mọi máy trong team dùng cùng con số.
-  # Dải 9001+ vẫn thuộc về dữ liệu demo như quy ước cũ.
-  #
-  # LevelID = 1 là N5 (xem v1.0.4/01-seed-catalog.yaml).
-  #
-  # ⚠ HAI ĐIỀU KHÔNG ĐƯỢC LÀM VỚI FILE NÀY — cả hai đều đã xảy ra một lần:
-  #
-  # 1. KHÔNG sửa nội dung changeSet sau khi nó đã chạy ở đâu đó. Liquibase
-  #    lưu checksum của từng changeSet; đổi dù chỉ một dấu phẩy trong chú
-  #    thích cũng làm app từ chối khởi động với "Validation Failed: checksum".
-  #    Muốn đổi nội dung thì thêm changeSet MỚI, không sửa cái cũ.
-  #
-  # 2. KHÔNG tìm-thay hàng loạt thuật ngữ ứng dụng lên file này. Cột Meaning
-  #    là NGHĨA TỪ ĐIỂN, không phải nhãn giao diện. Một lần đổi "học sinh"
-  #    thành "thí sinh" trên toàn dự án đã biến 学生 (gakusei = học sinh)
-  #    thành "thí sinh" và 先生 (sensei = giáo viên) thành "người ra đề" —
-  #    sai nghĩa, và người học sẽ học thuộc cái sai đó.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.4.0-03-seed-vocab-n5

@@ -5,13 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/**
- * Bản đóng băng một đáp án của câu hỏi trong một đề thi cụ thể.
- *
- * Đây là nơi duy nhất quyết định "đáp án nào đúng" khi chấm bài của đề thi đó.
- * Người ra đề đổi đáp án đúng trong ngân hàng câu hỏi sẽ không hồi tố lên các đề
- * đã phát hành.
- */
+/** Bản đóng băng một đáp án của câu hỏi trong một đề thi cụ thể. */
 @Entity
 @Table(name = "ExamQuestionAnswers")
 @Getter

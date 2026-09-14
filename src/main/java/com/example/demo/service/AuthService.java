@@ -13,6 +13,8 @@ import com.example.demo.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import com.example.demo.domain.enums.AuthProvider;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,7 +29,10 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    
+
+    public static final String LOCKED_MESSAGE =
+        "Tài khoản đã bị quản trị viên khoá. Liên hệ quản trị viên để được mở lại.";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
@@ -36,9 +41,18 @@ public class AuthService {
     
     @Transactional
     public AuthResponse login(AuthRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
+        } catch (LockedException e) {
+            // Câu mặc định của Spring là tiếng Anh ("User account is locked").
+            throw new RuntimeException(LOCKED_MESSAGE);
+        } catch (BadCredentialsException e) {
+            // Một câu duy nhất cho cả sai email lẫn sai mật khẩu.
+            throw new RuntimeException("Email hoặc mật khẩu không đúng.");
+        }
         
         SecurityContextHolder.getContext().setAuthentication(authentication);
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
@@ -59,14 +73,15 @@ public class AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already exists");
+            throw new RuntimeException("Email này đã được đăng ký.");
         }
         
+        // MỌI tài khoản đăng ký đều là HỌC VIÊN.
         User user = User.builder()
             .fullName(request.getFullName())
             .email(request.getEmail())
             .passwordHash(passwordEncoder.encode(request.getPassword()))
-            .role(Role.valueOf(request.getRole())) // Sử dụng Role enum
+            .role(Role.STUDENT)
             .authProvider(AuthProvider.LOCAL)
             .createdAt(LocalDateTime.now())
             .build();
@@ -85,6 +100,9 @@ public class AuthService {
         }
         
         UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+        if (!userDetails.isAccountNonLocked()) {
+            throw new RuntimeException(LOCKED_MESSAGE);
+        }
         if (!jwtUtils.validateToken(refreshToken, userDetails)) {
             throw new RuntimeException("Invalid refresh token");
         }
@@ -112,7 +130,11 @@ public class AuthService {
         
         User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
-        
+        // /api/auth/** là permitAll nên request này không qua JwtAuthenticationFilter.
+        if (user.isLocked()) {
+            throw new RuntimeException(LOCKED_MESSAGE);
+        }
+
         return mapToUserResponse(user);
     }
     

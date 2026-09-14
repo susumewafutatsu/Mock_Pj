@@ -11,12 +11,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.io.Serializable;
 
-/**
- * Khoá của {@link DeckItem}: một thẻ chỉ nằm một lần trong một bộ.
- *
- * Loại thẻ nằm trong khoá vì {@code itemId} là số thứ tự trong bảng riêng của
- * từng loại — VocabID 1 và KanjiID 1 là hai thẻ hoàn toàn khác nhau.
- */
+/** Khoá của {@link DeckItem}: một thẻ chỉ nằm một lần trong một bộ. */
 @Embeddable
 @Getter
 @Setter

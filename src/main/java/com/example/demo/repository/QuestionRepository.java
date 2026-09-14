@@ -26,6 +26,9 @@ public interface QuestionRepository
     /** Số câu hỏi còn hiệu lực trong một ngân hàng (bỏ qua câu đã xoá mềm). */
     long countByBank_BankIdAndIsDeletedFalse(Integer bankId);
 
+    /** Số câu đang dùng một bài đọc — chặn xoá đoạn văn còn câu gắn vào. */
+    long countByPassage_PassageIdAndIsDeletedFalse(Integer passageId);
+
     /** Câu hỏi đã được đưa vào ít nhất một đề thi. */
     @Query("""
             SELECT COUNT(eq) > 0 FROM ExamQuestion eq

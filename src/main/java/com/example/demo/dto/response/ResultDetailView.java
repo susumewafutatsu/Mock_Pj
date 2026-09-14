@@ -22,17 +22,7 @@ public class ResultDetailView {
     private String selectedAnswerContent;
     private String essayResponse;
 
-    /**
-     * Toàn bộ lựa chọn của câu này, theo snapshot của đề. Rỗng với câu tự luận.
-     *
-     * Trang xem lại cần cả các phương án thí sinh KHÔNG chọn: nhìn lại bốn đáp
-     * án rồi thấy mình đã loại nhầm cái nào mới là lúc học được, còn một dòng
-     * "bạn chọn B, đáp án đúng là C" thì không nói lên điều gì.
-     *
-     * Danh sách này không mang cờ đúng/sai (xem {@link ExamOptionView}); đáp án
-     * đúng nhận diện bằng {@link #correctSnapshotAnswerId}, và chỉ được điền khi
-     * người ra đề cho phép xem đáp án.
-     */
+    /** Toàn bộ lựa chọn của câu này, theo snapshot của đề. */
     private List<ExamOptionView> options;
 
     /** ID của đáp án đúng. null khi đề tắt xem đáp án, hoặc câu tự luận. */

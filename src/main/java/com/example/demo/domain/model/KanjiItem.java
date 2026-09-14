@@ -6,12 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một chữ Hán trong kho nội dung học.
- *
- * Tên cột {@code Glyph} thay vì {@code Character}: CHARACTER là từ khoá dành
- * riêng của MySQL, đặt tên cột như vậy là phải quote ở mọi câu lệnh về sau.
- */
+/** Một chữ Hán trong kho nội dung học. */
 @Entity
 @Table(name = "KanjiItems")
 @Getter
@@ -26,10 +21,7 @@ public class KanjiItem {
     @Column(name = "KanjiID")
     private Integer kanjiId;
 
-    /**
-     * Bản thân chữ Hán. Để 8 ký tự chứ không phải 1 vì vài chữ nằm ngoài mặt
-     * phẳng cơ bản của Unicode chiếm nhiều hơn một đơn vị mã.
-     */
+    /** Bản thân chữ Hán. Để 8 ký tự chứ không phải 1 vì vài chữ nằm ngoài mặt phẳng cơ bản của Unicode chiếm nhiều hơn một đơn vị mã. */
     @Column(name = "Glyph", nullable = false, unique = true, length = 8)
     private String glyph;
 

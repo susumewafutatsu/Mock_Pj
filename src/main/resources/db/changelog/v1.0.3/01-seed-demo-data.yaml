@@ -1,19 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # DỮ LIỆU MẪU ĐỂ TEST — KHÔNG CHẠY MẶC ĐỊNH.
-  #
-  # Mọi changeSet ở đây đều mang context "demo", nên chỉ nạp khi bật:
-  #   spring.liquibase.contexts=demo
-  # hoặc chạy app với: --spring.liquibase.contexts=demo
-  # Không bật thì Liquibase bỏ qua toàn bộ file này.
-  #
-  # ID được đặt trong dải 9001+ để không đụng dữ liệu tự tăng có sẵn
-  # trên DB dev của bạn. Email dùng đuôi @demo.local cho dễ nhận.
-  #
-  # Mật khẩu của mọi tài khoản mẫu: demo1234
-  # (hash BCrypt bên dưới đã kiểm tra khớp với BCryptPasswordEncoder
-  #  mà SecurityConfig đang dùng.)
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.0.3-01-seed-users
@@ -48,8 +34,7 @@ databaseChangeLog:
               - column: { name: password_hash, value: '$2a$10$Lx7yS/NoivFIjNDJ.mEOA.Zohi7obH1DsUJ5IBi3t6QBIE1lyI.h.' }
               - column: { name: role, value: "STUDENT" }
               - column: { name: auth_provider, value: "LOCAL" }
-        # Học sinh 03 KHÔNG thuộc lớp nào — dùng để kiểm tra luật hiển thị:
-        # em này chỉ thấy đề tự luyện (ClassID null), không thấy đề của lớp.
+        # Học sinh 03 KHÔNG thuộc lớp nào.
         - insert:
             tableName: Users
             columns:

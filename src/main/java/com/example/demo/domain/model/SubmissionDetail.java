@@ -63,4 +63,9 @@ public class SubmissionDetail {
 
     @Column(name = "AnsweredAt")
     private java.time.LocalDateTime answeredAt;
+
+    /** Số lần thí sinh đã bấm nghe câu này. Đếm ở server để F5 không nghe lại được. */
+    @Column(name = "AudioPlays", nullable = false)
+    @Builder.Default
+    private Integer audioPlays = 0;
 }

@@ -15,19 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-/**
- * Bản đề thi có đi vào Redis rồi quay ra nguyên vẹn không.
- *
- * Test này tồn tại vì đây là chỗ hỏng âm thầm: cache ghi được nhưng đọc ra sai
- * kiểu thì lỗi chỉ nổ ở request thứ hai của thí sinh, khi cache đã ấm — tức là
- * đúng lúc đang thi thật chứ không phải lúc chạy thử.
- *
- * Ba thứ dễ vỡ được kiểm ở đây: LocalDateTime (cần JavaTimeModule),
- * BigDecimal (điểm số, sai kiểu là sai điểm) và kiểu phần tử của List (thiếu
- * default typing thì Jackson trả về LinkedHashMap).
- *
- * Không cần Redis chạy: chỉ kiểm tra đúng lớp serializer mà RedisConfig lắp vào.
- */
+/** Bản đề thi có đi vào Redis rồi quay ra nguyên vẹn không. */
 class RedisPaperSerializationTest {
 
     private final GenericJackson2JsonRedisSerializer serializer =

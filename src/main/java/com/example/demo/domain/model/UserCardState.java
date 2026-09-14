@@ -13,16 +13,7 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Trạng thái ôn tập của MỘT người trên MỘT thẻ — nơi giữ toàn bộ tiến độ học.
- *
- * Cùng một thẻ với hai người là hai dòng khác nhau: lịch ôn phụ thuộc vào việc
- * từng người nhớ tới đâu, không phụ thuộc vào bản thân thẻ.
- *
- * Ghi danh một bộ thẻ = tạo các dòng ở đây với {@code dueAt} bằng thời điểm ghi
- * danh, nên thẻ mới xuất hiện ngay trong hàng đợi hôm nay. Không có bảng ghi
- * danh riêng: sự tồn tại của dòng này chính là bằng chứng người đó đang học thẻ.
- */
+/** Trạng thái ôn tập của MỘT người trên MỘT thẻ — nơi giữ toàn bộ tiến độ học. */
 @Entity
 @Table(
         name = "UserCardStates",
@@ -77,15 +68,19 @@ public class UserCardState {
     @Column(name = "LastReviewedAt")
     private LocalDateTime lastReviewedAt;
 
+    /** Mốc học lần đầu. null = thẻ mới chưa học. */
+    @Column(name = "FirstReviewedAt")
+    private LocalDateTime firstReviewedAt;
+
     @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
 
     // ── Hành vi ────────────────────────────────────────────────────────────
 
-    /** Thẻ chưa từng được ôn lần nào. */
+    /** Thẻ chưa từng được học lần nào. */
     public boolean isNew() {
-        return repetitions == null || repetitions == 0;
+        return firstReviewedAt == null;
     }
 
     /** Đã vào trí nhớ dài hạn (khoảng cách ôn từ 21 ngày trở lên). */
@@ -98,13 +93,7 @@ public class UserCardState {
         return dueAt != null && !now.isBefore(dueAt);
     }
 
-    /**
-     * Áp một lần ôn vào thẻ: tính lại hệ số dễ, khoảng cách và mốc đến hạn.
-     *
-     * Thẻ bị quên có {@code intervalDays = 0} nên {@code dueAt} rơi đúng vào
-     * thời điểm hiện tại — nó quay lại ngay trong phiên học hôm nay chứ không
-     * đợi sang mai.
-     */
+    /** Áp một lần ôn vào thẻ: tính lại hệ số dễ, khoảng cách và mốc đến hạn. */
     public void applyReview(ReviewGrade grade, LocalDateTime now) {
         Sm2Scheduler.Outcome outcome = Sm2Scheduler.next(
                 easeFactor,
@@ -118,8 +107,10 @@ public class UserCardState {
         repetitions = outcome.repetitions();
         lapses = outcome.lapses();
         lastReviewedAt = now;
-        // Cắt về giây trước khi ghi: xem DbTime để biết vì sao nửa giây làm
-        // tròn lên đủ để một thẻ vừa trả lời "Quên" không quay lại được.
+        if (firstReviewedAt == null) {
+            firstReviewedAt = now;
+        }
+        // Cắt về giây để thẻ "Quên" quay lại được ngay.
         dueAt = DbTime.atSecond(now.plusDays(outcome.intervalDays()));
     }
 }

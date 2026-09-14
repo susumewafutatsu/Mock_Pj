@@ -6,12 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một từ vựng tiếng Nhật trong kho nội dung học.
- *
- * Đây là nội dung dùng chung, không thuộc về người học nào. Việc "tôi thuộc từ
- * này tới đâu" nằm ở {@link UserCardState}.
- */
+/** Một từ vựng tiếng Nhật trong kho nội dung học. */
 @Entity
 @Table(
         name = "VocabItems",
@@ -35,11 +30,7 @@ public class VocabItem {
     @Column(name = "Word", nullable = false, length = 100)
     private String word;
 
-    /**
-     * Cách đọc bằng kana. Luôn bắt buộc, kể cả khi {@link #word} đã là kana:
-     * màn ôn thẻ hiển thị furigana từ cột này, và phần so đáp án gõ tay cũng
-     * so với cột này chứ không so với chữ viết.
-     */
+    /** Cách đọc bằng kana. Luôn bắt buộc, kể cả khi {@link #word} đã là kana. */
     @Column(name = "Reading", nullable = false, length = 100)
     private String reading;
 

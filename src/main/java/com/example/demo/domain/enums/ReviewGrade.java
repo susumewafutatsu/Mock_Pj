@@ -1,15 +1,6 @@
 package com.example.demo.domain.enums;
 
-/**
- * Người học tự đánh giá mình nhớ tới đâu sau khi lật thẻ.
- *
- * Bốn mức thay vì thang 0–5 gốc của SM-2: người học không phân biệt nổi "3"
- * với "4" khi đang ôn hàng trăm thẻ, và mỗi giây do dự là một giây không học.
- * Bốn nút với ý nghĩa rõ ràng cho dữ liệu sạch hơn hẳn một thang số mà ai
- * cũng hiểu một kiểu.
- *
- * {@link #quality()} quy đổi ngược về thang SM-2 để giữ nguyên công thức gốc.
- */
+/** Người học tự đánh giá mình nhớ tới đâu sau khi lật thẻ. */
 public enum ReviewGrade {
 
     /** Không nhớ gì. Thẻ quay lại từ đầu và được xếp ôn lại ngay hôm nay. */

@@ -8,13 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * Lịch mới của một thẻ sau khi người học tự đánh giá.
- *
- * Trả về đủ số liệu để màn hình nói được "gặp lại sau 6 ngày" — thấy khoảng
- * cách giãn ra là động lực đáng kể, và cũng là cách người học hiểu vì sao
- * bấm "Dễ" khác bấm "Khó".
- */
+/** Lịch mới của một thẻ sau khi người học tự đánh giá. */
 @Data
 @Builder
 @NoArgsConstructor

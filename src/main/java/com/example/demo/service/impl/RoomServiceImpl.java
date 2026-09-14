@@ -3,8 +3,12 @@ package com.example.demo.service.impl;
 import com.example.demo.domain.enums.JoinPolicy;
 import com.example.demo.domain.enums.MemberStatus;
 import com.example.demo.domain.enums.Role;
+import com.example.demo.domain.enums.RoomPhase;
 import com.example.demo.domain.enums.RoomStatus;
+import com.example.demo.domain.enums.SubmissionStatus;
 import com.example.demo.domain.model.Exam;
+import com.example.demo.domain.model.ExamQuestion;
+import com.example.demo.domain.model.ExamSubmission;
 import com.example.demo.domain.model.Room;
 import com.example.demo.domain.model.RoomExam;
 import com.example.demo.domain.model.RoomExamKey;
@@ -13,20 +17,27 @@ import com.example.demo.domain.model.RoomMemberKey;
 import com.example.demo.domain.model.SubjectLevel;
 import com.example.demo.domain.model.User;
 import com.example.demo.dto.request.RoomCreateRequest;
+import com.example.demo.dto.request.RoomDuplicateRequest;
 import com.example.demo.dto.request.RoomJoinRequest;
 import com.example.demo.dto.request.RoomUpdateRequest;
 import com.example.demo.dto.response.RoomMemberResponse;
+import com.example.demo.dto.response.RoomMonitorResponse;
 import com.example.demo.dto.response.RoomResponse;
 import com.example.demo.exception.BusinessException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.exception.UnauthorizedException;
+import com.example.demo.repository.ExamQuestionRepository;
 import com.example.demo.repository.ExamRepository;
+import com.example.demo.repository.ExamSubmissionRepository;
 import com.example.demo.repository.RoomExamRepository;
 import com.example.demo.repository.RoomMemberRepository;
 import com.example.demo.repository.RoomRepository;
 import com.example.demo.repository.SubjectLevelRepository;
+import com.example.demo.repository.SubmissionDetailRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.service.NotificationService;
 import com.example.demo.service.RoomService;
+import com.example.demo.service.SubmissionService;
 import com.example.demo.util.DbTime;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -35,68 +46,88 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-/**
- * Cài đặt phòng thi.
- *
- * Phần đáng đọc nhất ở đây là {@link #join}: cấp ghế cho một phòng có sức chứa
- * là một cuộc tranh chấp thật, và cách làm hiển nhiên nhất thì sai.
- */
+/** Phòng thi: một buổi thi cho một đề. */
 @Service
 @RequiredArgsConstructor
 public class RoomServiceImpl implements RoomService {
 
     private static final Logger log = LoggerFactory.getLogger(RoomServiceImpl.class);
 
-    /**
-     * Bảng chữ cái sinh mã phòng — cố ý bỏ 0/O/1/I/L.
-     *
-     * Mã này được đọc to cho cả phòng chép lại, nên mấy ký tự nhìn giống nhau
-     * là nguồn gõ sai số một. Bỏ chúng đi rẻ hơn nhiều so với việc trả lời
-     * "em gõ đúng mã rồi mà sao không vào được".
-     */
+    /** Bảng chữ cái sinh mã phòng — bỏ 0/O/1/I/L cho dễ đọc. */
     private static final String CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
     private static final int CODE_LENGTH = 6;
-
-    /** Số lần thử sinh mã trước khi chịu thua. Va chạm ở 31^6 tổ hợp là cực hiếm. */
     private static final int CODE_MAX_ATTEMPTS = 10;
-
     private static final SecureRandom RANDOM = new SecureRandom();
+
+    /** Nhắc thí sinh trước giờ hẹn bao nhiêu phút. */
+    private static final int REMINDER_MINUTES = 15;
+
+    /** Bỏ qua thông báo đã trễ quá chừng này phút (phòng cũ, server tắt lâu). */
+    private static final int NOTICE_GRACE_MINUTES = 10;
+
+    private static final DateTimeFormatter HOUR_DAY = DateTimeFormatter.ofPattern("HH:mm dd/MM");
+    private static final String ROOMS_LINK = "/student/exams?tab=rooms";
 
     private final RoomRepository roomRepository;
     private final RoomMemberRepository memberRepository;
     private final RoomExamRepository roomExamRepository;
     private final ExamRepository examRepository;
+    private final ExamQuestionRepository examQuestionRepository;
     private final SubjectLevelRepository levelRepository;
     private final UserRepository userRepository;
+    private final ExamSubmissionRepository submissionRepository;
+    private final SubmissionDetailRepository detailRepository;
+    private final SubmissionService submissionService;
+    private final NotificationService notificationService;
 
-    // ── Phía người ra đề ───────────────────────────────────────────────────
+    // ── Người ra đề ────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
     public List<RoomResponse> getMyRooms(String ownerEmail) {
         User owner = requireUser(ownerEmail);
-        List<Room> rooms = roomRepository.findByOwner(owner.getUserId());
-        return toResponses(rooms, owner, true);
+        return toResponses(roomRepository.findByOwner(owner.getUserId()), owner, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RoomResponse getRoom(String viewerEmail, Integer roomId) {
+        User viewer = requireUser(viewerEmail);
+        Room room = requireRoom(roomId);
+        boolean member = memberRepository.existsById_RoomIdAndId_UserIdAndStatus(
+                roomId, viewer.getUserId(), MemberStatus.ACTIVE);
+        if (!room.isOwnedBy(viewer.getUserId()) && !member) {
+            throw new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId);
+        }
+        return describe(room, viewer, true);
     }
 
     @Override
     @Transactional
     public RoomResponse createRoom(String ownerEmail, RoomCreateRequest request) {
         User owner = requireTeacher(ownerEmail);
-
-        SubjectLevel level = null;
-        if (request.getLevelId() != null) {
-            level = levelRepository.findById(request.getLevelId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Không tìm thấy trình độ id=" + request.getLevelId()));
+        Exam exam = request.getExamId() == null ? null : requireUsableExam(request.getExamId(), owner);
+        if (Boolean.TRUE.equals(request.getOpenLobby()) && exam == null) {
+            throw new BusinessException("Chọn đề thi trước khi mở sảnh chờ");
         }
+
+        SubjectLevel level = request.getLevelId() != null
+                ? requireLevel(request.getLevelId())
+                : exam == null ? null : exam.getLevel();
 
         Room room = Room.builder()
                 .name(request.getName().trim())
@@ -104,19 +135,27 @@ public class RoomServiceImpl implements RoomService {
                 .owner(owner)
                 .level(level)
                 .capacity(request.getCapacity())
-                .joinPolicy(request.getJoinPolicy() == null
-                        ? JoinPolicy.CODE : request.getJoinPolicy())
-                // Phòng mới luôn ở DRAFT: người ra đề cần gắn đề vào trước đã.
-                // Mở sẵn thì thí sinh vào và thấy một phòng trống rỗng.
+                .joinPolicy(request.getJoinPolicy() == null ? JoinPolicy.CODE : request.getJoinPolicy())
                 .status(RoomStatus.DRAFT)
-                .startTime(request.getStartTime())
-                .endTime(request.getEndTime())
+                .lateJoinMinutes(request.getLateJoinMinutes() == null
+                        ? Room.DEFAULT_LATE_JOIN_MINUTES : request.getLateJoinMinutes())
+                .instructions(trimToNull(request.getInstructions()))
                 .build();
-
+        if (request.getStartTime() != null) {
+            requireFuture(request.getStartTime());
+            room.setStartTime(DbTime.atSecond(request.getStartTime()));
+        }
         roomRepository.save(room);
-        log.info("Mở phòng thi roomId={} code={} owner={}",
-                room.getRoomId(), room.getCode(), owner.getUserId());
-        return toResponse(room, owner, true, 0L, 0L, null);
+
+        if (exam != null) {
+            saveRoomExam(room, exam);
+            if (Boolean.TRUE.equals(request.getOpenLobby())) {
+                room.setStatus(RoomStatus.OPEN);
+                roomRepository.save(room);
+            }
+        }
+        log.info("Mở phòng thi roomId={} code={} owner={}", room.getRoomId(), room.getCode(), owner.getUserId());
+        return describe(room, owner, true);
     }
 
     @Override
@@ -124,19 +163,15 @@ public class RoomServiceImpl implements RoomService {
     public RoomResponse updateRoom(String ownerEmail, Integer roomId, RoomUpdateRequest request) {
         User owner = requireUser(ownerEmail);
         Room room = requireOwnedRoom(roomId, owner);
+        LocalDateTime now = LocalDateTime.now();
 
         if (request.getName() != null && !request.getName().isBlank()) {
             room.setName(request.getName().trim());
         }
         if (request.getLevelId() != null) {
-            room.setLevel(levelRepository.findById(request.getLevelId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Không tìm thấy trình độ id=" + request.getLevelId())));
+            room.setLevel(requireLevel(request.getLevelId()));
         }
         if (request.getCapacity() != null) {
-            // Hạ sức chứa xuống dưới sĩ số hiện tại thì phải mời người ra —
-            // việc đó cần chủ đích, không được xảy ra như tác dụng phụ của
-            // một lần sửa số.
             long active = memberRepository.countActive(roomId);
             if (request.getCapacity() < active) {
                 throw new BusinessException("Phòng đang có " + active
@@ -147,12 +182,56 @@ public class RoomServiceImpl implements RoomService {
         if (request.getJoinPolicy() != null) {
             room.setJoinPolicy(request.getJoinPolicy());
         }
+        if (request.getLateJoinMinutes() != null) {
+            room.setLateJoinMinutes(request.getLateJoinMinutes());
+        }
+        if (request.getInstructions() != null) {
+            room.setInstructions(trimToNull(request.getInstructions()));
+        }
+        if (request.getExamId() != null) {
+            Exam exam = requireUsableExam(request.getExamId(), owner);
+            requireExamsEditable(room);
+            replaceExam(room, exam);
+            if (room.getLevel() == null) {
+                room.setLevel(exam.getLevel());
+            }
+        }
+
+        if (request.getStatus() == RoomStatus.RUNNING) {
+            roomRepository.save(room);
+            return startExam(ownerEmail, roomId);
+        }
+        if (request.getStatus() == RoomStatus.CLOSED) {
+            roomRepository.save(room);
+            return endExam(ownerEmail, roomId);
+        }
         if (request.getStatus() != null) {
-            requireHasExamBeforeOpening(room, request.getStatus());
+            // Buổi thi đã diễn ra thì không mở lại — bảng xếp hạng gắn với khung giờ đó.
+            if (room.hasStarted(now) || room.getStatus() == RoomStatus.RUNNING) {
+                throw new BusinessException("Buổi thi của phòng này đã diễn ra, không mở lại được. "
+                        + "Dùng \"Nhân bản\" để tạo buổi thi mới.");
+            }
+            if (request.getStatus() == RoomStatus.OPEN && roomExamRepository.countById_RoomId(roomId) == 0) {
+                throw new BusinessException("Phòng chưa có đề thi, chưa mở sảnh chờ được");
+            }
             room.setStatus(request.getStatus());
         }
-        if (request.getStartTime() != null) {
-            room.setStartTime(request.getStartTime());
+
+        boolean scheduling = request.getStartTime() != null || Boolean.TRUE.equals(request.getClearStartTime());
+        if (scheduling) {
+            RoomPhase phase = room.phaseAt(now, examMinutes(roomId));
+            if (phase == RoomPhase.IN_PROGRESS || phase == RoomPhase.ENDED) {
+                throw new BusinessException("Phòng đã bắt đầu làm bài, không đổi được giờ hẹn nữa");
+            }
+            if (Boolean.TRUE.equals(request.getClearStartTime())) {
+                room.setStartTime(null);
+            } else {
+                requireFuture(request.getStartTime());
+                room.setStartTime(DbTime.atSecond(request.getStartTime()));
+            }
+            room.setEndTime(null);
+            room.setReminderSentAt(null);
+            room.setStartNotifiedAt(null);
         }
         if (request.getEndTime() != null) {
             room.setEndTime(request.getEndTime());
@@ -164,15 +243,144 @@ public class RoomServiceImpl implements RoomService {
 
     @Override
     @Transactional
+    public RoomResponse startExam(String ownerEmail, Integer roomId) {
+        User owner = requireUser(ownerEmail);
+        Room room = requireOwnedRoom(roomId, owner);
+        LocalDateTime now = DbTime.now();
+        Integer minutes = examMinutes(roomId);
+
+        if (minutes == null) {
+            throw new BusinessException("Phòng chưa có đề thi, chưa bắt đầu được");
+        }
+        switch (room.phaseAt(now, minutes)) {
+            case DRAFT -> throw new BusinessException("Phòng còn là nháp. Mở sảnh chờ trước rồi mới bắt đầu làm bài.");
+            case IN_PROGRESS -> throw new BusinessException("Phòng đang trong giờ làm bài rồi");
+            case ENDED -> throw new BusinessException("Phòng thi đã kết thúc");
+            default -> { /* WAITING */ }
+        }
+
+        room.setStatus(RoomStatus.RUNNING);
+        room.setStartTime(now);
+        room.setEndTime(now.plusMinutes(minutes));
+        room.setStartNotifiedAt(now);
+        if (room.getReminderSentAt() == null) {
+            room.setReminderSentAt(now);
+        }
+        roomRepository.save(room);
+        log.info("Bắt đầu làm bài roomId={} lúc {} tới {}", roomId, now, room.getEndTime());
+
+        notificationService.notifyAll(membersOf(roomId), NotificationService.Kind.ROOM_STARTED,
+                "Phòng \"" + room.getName() + "\" đã bắt đầu làm bài",
+                "Vào phòng để làm bài — hết giờ lúc " + room.getEndTime().format(HOUR_DAY) + ".",
+                ROOMS_LINK);
+        return describe(room, owner, true);
+    }
+
+    @Override
+    @Transactional
+    public RoomResponse endExam(String ownerEmail, Integer roomId) {
+        User owner = requireUser(ownerEmail);
+        Room room = requireOwnedRoom(roomId, owner);
+        LocalDateTime now = DbTime.now();
+        RoomPhase phase = room.phaseAt(now, examMinutes(roomId));
+
+        if (phase == RoomPhase.ENDED && room.getStatus() == RoomStatus.CLOSED) {
+            return describe(room, owner, true);
+        }
+        if (phase == RoomPhase.IN_PROGRESS) {
+            room.setEndTime(now);
+        }
+        boolean notify = room.getEndNotifiedAt() == null && phase != RoomPhase.DRAFT;
+        room.setStatus(RoomStatus.CLOSED);
+        room.setEndNotifiedAt(now);
+        roomRepository.save(room);
+
+        if (phase == RoomPhase.IN_PROGRESS) {
+            int cut = submissionRepository.cutRunningSessionsOfRoom(roomId, now);
+            if (cut > 0) {
+                submissionService.autoSubmitExpiredSessions();
+            }
+            log.info("Kết thúc sớm roomId={}, thu {} bài đang làm", roomId, cut);
+        }
+
+        Room fresh = roomRepository.findById(roomId).orElseThrow();
+        if (notify) {
+            boolean ran = phase == RoomPhase.IN_PROGRESS || phase == RoomPhase.ENDED;
+            notificationService.notifyAll(membersOf(roomId), NotificationService.Kind.ROOM_ENDED,
+                    ran ? "Phòng \"" + fresh.getName() + "\" đã kết thúc"
+                        : "Phòng \"" + fresh.getName() + "\" đã đóng",
+                    ran ? "Bảng xếp hạng và kết quả của cả phòng đã có."
+                        : "Người ra đề đã đóng phòng trước giờ thi.",
+                    ROOMS_LINK);
+        }
+        return describe(fresh, owner, true);
+    }
+
+    @Override
+    @Transactional
+    public RoomResponse duplicateRoom(String ownerEmail, Integer roomId, RoomDuplicateRequest request) {
+        User owner = requireTeacher(ownerEmail);
+        Room source = requireOwnedRoom(roomId, owner);
+        RoomDuplicateRequest req = request == null ? new RoomDuplicateRequest() : request;
+
+        String name = req.getName() != null && !req.getName().isBlank()
+                ? req.getName().trim()
+                : truncate(source.getName() + " (buổi mới)", 100);
+
+        Room copy = Room.builder()
+                .name(name)
+                .code(generateUniqueCode())
+                .owner(owner)
+                .level(source.getLevel())
+                .capacity(source.getCapacity())
+                .joinPolicy(source.getJoinPolicy())
+                .status(RoomStatus.DRAFT)
+                .lateJoinMinutes(source.getLateJoinMinutes())
+                .instructions(source.getInstructions())
+                .build();
+        if (req.getStartTime() != null) {
+            requireFuture(req.getStartTime());
+            copy.setStartTime(DbTime.atSecond(req.getStartTime()));
+        }
+        roomRepository.save(copy);
+
+        roomExamRepository.findWithExamByRoomId(roomId).stream().findFirst()
+                .ifPresent(re -> saveRoomExam(copy, re.getExam()));
+
+        if (Boolean.TRUE.equals(req.getKeepMembers())) {
+            List<RoomMember> members = memberRepository.findActiveMembers(roomId);
+            int seat = 1;
+            List<User> added = new ArrayList<>();
+            for (RoomMember m : members) {
+                memberRepository.save(RoomMember.builder()
+                        .id(new RoomMemberKey(copy.getRoomId(), m.getUser().getUserId()))
+                        .room(copy)
+                        .user(m.getUser())
+                        .seatNo(seat++)
+                        .status(MemberStatus.ACTIVE)
+                        .build());
+                added.add(m.getUser());
+            }
+            if (copy.getCapacity() != null && added.size() > copy.getCapacity()) {
+                copy.setCapacity(added.size());
+                roomRepository.save(copy);
+            }
+            notificationService.notifyAll(added, NotificationService.Kind.ROOM_ADDED,
+                    "Bạn được thêm vào phòng \"" + copy.getName() + "\"",
+                    "Người ra đề đã tạo buổi thi mới và giữ bạn trong danh sách.", ROOMS_LINK);
+        }
+        log.info("Nhân bản phòng roomId={} → {}", roomId, copy.getRoomId());
+        return describe(copy, owner, true);
+    }
+
+    @Override
+    @Transactional
     public void deleteRoom(String ownerEmail, Integer roomId) {
         User owner = requireUser(ownerEmail);
         Room room = requireOwnedRoom(roomId, owner);
-
-        // Đếm cả người đã rời đi: xoá phòng là xoá luôn dấu vết ai từng ở đó.
         if (memberRepository.countSeatsIssued(roomId) > 0) {
-            throw new BusinessException(
-                    "Phòng đã có người tham gia. Hãy đóng phòng thay vì xoá, "
-                            + "để giữ lại lịch sử làm bài.");
+            throw new BusinessException("Phòng đã có người tham gia. Hãy đóng phòng thay vì xoá, "
+                    + "để giữ lại lịch sử làm bài.");
         }
         roomRepository.delete(room);
         log.info("Xoá phòng thi roomId={} owner={}", roomId, owner.getUserId());
@@ -183,7 +391,6 @@ public class RoomServiceImpl implements RoomService {
     public List<RoomMemberResponse> getMembers(String ownerEmail, Integer roomId) {
         User owner = requireUser(ownerEmail);
         requireOwnedRoom(roomId, owner);
-
         return memberRepository.findActiveMembers(roomId).stream()
                 .map(m -> RoomMemberResponse.builder()
                         .userId(m.getUser().getUserId())
@@ -197,19 +404,151 @@ public class RoomServiceImpl implements RoomService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public RoomMonitorResponse monitor(String ownerEmail, Integer roomId) {
+        User owner = requireUser(ownerEmail);
+        Room room = requireOwnedRoom(roomId, owner);
+        LocalDateTime now = LocalDateTime.now();
+        Integer minutes = examMinutes(roomId);
+        RoomPhase phase = room.phaseAt(now, minutes);
+        Exam exam = roomExamRepository.findWithExamByRoomId(roomId).stream()
+                .findFirst().map(RoomExam::getExam).orElse(null);
+
+        List<RoomMember> members = memberRepository.findActiveMembers(roomId);
+        Map<String, ExamSubmission> sessionOf = new HashMap<>();
+        Map<Integer, Long> answeredOf = new HashMap<>();
+        int totalQuestions = 0;
+        BigDecimal maxScore = BigDecimal.ZERO;
+
+        boolean started = phase == RoomPhase.IN_PROGRESS || phase == RoomPhase.ENDED;
+        if (exam != null) {
+            List<ExamQuestion> questions = examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId());
+            totalQuestions = questions.size();
+            maxScore = questions.stream()
+                    .map(q -> q.getPoints() == null ? BigDecimal.ONE : q.getPoints())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            if (started && !members.isEmpty()) {
+                Set<String> ids = members.stream().map(m -> m.getUser().getUserId()).collect(Collectors.toSet());
+                LocalDateTime from = room.getStartTime();
+                LocalDateTime end = room.endAt(minutes);
+                for (ExamSubmission s : submissionRepository.findByExam_ExamIdAndStudent_UserIdIn(exam.getExamId(), ids)) {
+                    if (s.getStartedAt() == null
+                            || (from != null && s.getStartedAt().isBefore(from))
+                            || (end != null && s.getStartedAt().isAfter(end))) {
+                        continue;
+                    }
+                    sessionOf.merge(s.getStudent().getUserId(), s,
+                            (a, b) -> a.getAttemptNumber() >= b.getAttemptNumber() ? a : b);
+                }
+                if (!sessionOf.isEmpty()) {
+                    for (Object[] row : detailRepository.countAnsweredBySubmissionIdIn(
+                            sessionOf.values().stream().map(ExamSubmission::getSubmissionId).toList())) {
+                        answeredOf.put((Integer) row[0], ((Number) row[1]).longValue());
+                    }
+                }
+            }
+        }
+
+        List<RoomMonitorResponse.Row> rows = new ArrayList<>();
+        int online = 0, notStarted = 0, inProgress = 0, submitted = 0, atRisk = 0;
+        for (RoomMember m : members) {
+            ExamSubmission s = sessionOf.get(m.getUser().getUserId());
+            String status = s == null ? "NOT_STARTED" : s.isInProgress() ? "IN_PROGRESS" : "SUBMITTED";
+            boolean risky = s != null && s.isInProgress() && Boolean.TRUE.equals(s.getAtRiskStatus());
+            boolean isOnline = m.isOnlineAt(now) || (s != null && s.isInProgress() && !risky);
+
+            switch (status) {
+                case "IN_PROGRESS" -> inProgress++;
+                case "SUBMITTED" -> submitted++;
+                default -> notStarted++;
+            }
+            if (isOnline) online++;
+            if (risky) atRisk++;
+
+            RoomMonitorResponse.Row.RowBuilder row = RoomMonitorResponse.Row.builder()
+                    .userId(m.getUser().getUserId())
+                    .fullName(m.getUser().getFullName())
+                    .email(m.getUser().getEmail())
+                    .seatNo(m.getSeatNo())
+                    .joinedAt(m.getJoinedAt())
+                    .online(isOnline)
+                    .lastSeenAt(m.getLastSeenAt())
+                    .status(status)
+                    .atRisk(risky);
+            if (s != null) {
+                row.answered(answeredOf.getOrDefault(s.getSubmissionId(), 0L).intValue())
+                        .startedAt(s.getStartedAt())
+                        .submittedAt(s.getSubmittedAt())
+                        .autoSubmitted(Boolean.TRUE.equals(s.getAutoSubmitted()))
+                        .submissionId(s.getSubmissionId());
+                if (!s.isInProgress()) {
+                    row.score(s.getTotalScore())
+                            .percent(maxScore.signum() == 0 || s.getTotalScore() == null ? null
+                                    : s.getTotalScore().multiply(BigDecimal.valueOf(100))
+                                            .divide(maxScore, 0, RoundingMode.HALF_UP).intValue());
+                }
+            }
+            rows.add(row.build());
+        }
+        rows.sort(Comparator.comparing(RoomMonitorResponse.Row::getSeatNo));
+
+        return RoomMonitorResponse.builder()
+                .roomId(roomId)
+                .phase(phase)
+                .startTime(room.getStartTime())
+                .endTime(room.endAt(minutes))
+                .lateJoinUntil(started ? room.lateJoinUntil(minutes) : null)
+                .serverTime(now)
+                .examId(exam == null ? null : exam.getExamId())
+                .examTitle(exam == null ? null : exam.getTitle())
+                .totalQuestions(totalQuestions)
+                .maxScore(maxScore)
+                .joined(members.size())
+                .online(online)
+                .notStarted(notStarted)
+                .inProgress(inProgress)
+                .submitted(submitted)
+                .atRisk(atRisk)
+                .members(rows)
+                .build();
+    }
+
+    @Override
     @Transactional
     public void kickMember(String ownerEmail, Integer roomId, String userId) {
         User owner = requireUser(ownerEmail);
-        requireOwnedRoom(roomId, owner);
+        Room room = requireOwnedRoom(roomId, owner);
 
         RoomMember member = memberRepository.findById_RoomIdAndId_UserId(roomId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Người này không có trong phòng"));
+                .orElseThrow(() -> new ResourceNotFoundException("Người này không có trong phòng"));
         if (!member.isActive()) {
             throw new BusinessException("Người này đã không còn trong phòng");
         }
-        member.deactivate(MemberStatus.KICKED, DbTime.now());
+        LocalDateTime now = DbTime.now();
+        member.deactivate(MemberStatus.KICKED, now);
         memberRepository.save(member);
+
+        // Mời ra giữa giờ thi: thu bài đang làm ngay.
+        if (room.phaseAt(now, examMinutes(roomId)) == RoomPhase.IN_PROGRESS) {
+            boolean cut = false;
+            for (RoomExam re : roomExamRepository.findById_RoomIdOrderByOrderNoAsc(roomId)) {
+                Optional<ExamSubmission> running = submissionRepository
+                        .findByExam_ExamIdAndStudent_UserIdAndStatus(re.getId().getExamId(), userId, SubmissionStatus.IN_PROGRESS);
+                if (running.isPresent()) {
+                    running.get().setExpiresAt(now);
+                    submissionRepository.save(running.get());
+                    cut = true;
+                }
+            }
+            if (cut) {
+                submissionRepository.flush();
+                submissionService.autoSubmitExpiredSessions();
+            }
+        }
+        notificationService.notify(member.getUser(), NotificationService.Kind.ROOM_KICKED,
+                "Bạn đã được mời ra khỏi phòng \"" + room.getName() + "\"",
+                "Liên hệ người ra đề nếu có nhầm lẫn.", ROOMS_LINK);
         log.info("Mời ra khỏi phòng roomId={} userId={}", roomId, userId);
     }
 
@@ -218,28 +557,15 @@ public class RoomServiceImpl implements RoomService {
     public RoomResponse attachExam(String ownerEmail, Integer roomId, Integer examId) {
         User owner = requireUser(ownerEmail);
         Room room = requireOwnedRoom(roomId, owner);
-
-        Exam exam = examRepository.findById(examId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy đề thi id=" + examId));
-        // Chỉ gắn được đề của chính mình. Thiếu bước này thì ai cũng gắn được
-        // đề của người khác vào phòng mình và phát tán nội dung của họ.
-        if (exam.getCreatedBy() == null
-                || !exam.getCreatedBy().getUserId().equals(owner.getUserId())) {
-            throw new UnauthorizedException("Chỉ gắn được đề thi do chính bạn tạo");
-        }
+        Exam exam = requireUsableExam(examId, owner);
         if (roomExamRepository.existsById_RoomIdAndId_ExamId(roomId, examId)) {
             throw new BusinessException("Đề thi này đã có trong phòng");
         }
-
-        long current = roomExamRepository.countById_RoomId(roomId);
-        roomExamRepository.save(RoomExam.builder()
-                .id(new RoomExamKey(roomId, examId))
-                .room(room)
-                .exam(exam)
-                .orderNo((int) current + 1)
-                .build());
-
+        requireExamsEditable(room);
+        if (roomExamRepository.countById_RoomId(roomId) > 0) {
+            throw new BusinessException("Mỗi phòng thi dùng một đề. Muốn đổi đề thì sửa phòng.");
+        }
+        saveRoomExam(room, exam);
         return describe(room, owner, true);
     }
 
@@ -248,18 +574,19 @@ public class RoomServiceImpl implements RoomService {
     public RoomResponse detachExam(String ownerEmail, Integer roomId, Integer examId) {
         User owner = requireUser(ownerEmail);
         Room room = requireOwnedRoom(roomId, owner);
-
         RoomExamKey key = new RoomExamKey(roomId, examId);
         if (!roomExamRepository.existsById(key)) {
             throw new ResourceNotFoundException("Đề thi này không có trong phòng");
         }
-        // Chỉ gỡ liên kết. Đề vẫn còn nguyên trong ngân hàng, và bài đã làm
-        // vẫn còn nguyên vì chúng trỏ tới đề chứ không trỏ tới phòng.
+        requireExamsEditable(room);
+        if (room.getStatus() == RoomStatus.OPEN) {
+            throw new BusinessException("Sảnh chờ đang mở, không gỡ đề được. Đổi đề trong phần Sửa phòng.");
+        }
         roomExamRepository.deleteById(key);
         return describe(room, owner, true);
     }
 
-    // ── Phía thí sinh ──────────────────────────────────────────────────────
+    // ── Thí sinh ───────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
@@ -276,72 +603,143 @@ public class RoomServiceImpl implements RoomService {
     @Transactional(readOnly = true)
     public List<RoomResponse> browseOpenRooms(String userEmail) {
         User user = requireUser(userEmail);
-        List<Room> rooms = roomRepository.findOpenRooms(RoomStatus.OPEN);
-        // Người ngoài không được thấy mã phòng — thấy mã thì cơ chế vào bằng
-        // mã của những phòng CODE cũng mất ý nghĩa nếu chúng lọt vào danh sách này.
-        return toResponses(rooms, user, false);
+        List<Room> rooms = new ArrayList<>(roomRepository.findOpenRooms(RoomStatus.OPEN));
+        rooms.addAll(roomRepository.findOpenRooms(RoomStatus.RUNNING));
+        return toResponses(rooms, user, true).stream()
+                .filter(RoomResponse::isAcceptingMembers)
+                .toList();
     }
 
-    /**
-     * Vào phòng bằng mã — nơi "ai nhanh thì vào" thật sự diễn ra.
-     *
-     * Cách hiển nhiên là {@code SELECT COUNT(*)}, so với sức chứa, rồi
-     * {@code INSERT}. Cách đó SAI: hai request gần như cùng lúc đều đọc được
-     * cùng một con số cũ, cùng kết luận "còn chỗ", và phòng 50 chỗ nhận 52 người.
-     *
-     * Ở đây khoá dòng PHÒNG trước khi đếm ({@code findByIdForUpdate}), nên hai
-     * người tranh cùng một phòng buộc phải xếp hàng — và chỉ họ mới phải xếp
-     * hàng, hai phòng khác nhau vẫn nhận người song song. Ràng buộc
-     * UNIQUE(RoomID, SeatNo) là lưới an toàn cuối cùng, thứ vẫn đúng kể cả khi
-     * mai kia có ai viết một đường vào phòng khác mà quên khoá.
-     *
-     * Idempotent: người đã ở trong phòng gọi lại nhận về đúng ghế cũ. Người đã
-     * rời đi thì được nhận lại ghế CŨ chứ không phải ghế mới — ghế đã cấp thì
-     * không bao giờ cấp lại cho ai khác, nên nó vẫn còn đó chờ họ.
-     */
     @Override
     @Transactional
     public RoomResponse join(String userEmail, RoomJoinRequest request) {
-        User user = requireUser(userEmail);
+        User user = requireStudent(userEmail);
         String code = request.getCode() == null ? "" : request.getCode().trim().toUpperCase();
-
         Room found = roomRepository.findByCode(code)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không có phòng nào mang mã này"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không có phòng nào mang mã này"));
+        return joinRoom(user, found);
+    }
 
-        // Khoá dòng phòng. Từ đây tới hết transaction, không ai khác cấp được
-        // ghế trong cùng phòng.
+    @Override
+    @Transactional
+    public RoomResponse joinOpenRoom(String userEmail, Integer roomId) {
+        User user = requireStudent(userEmail);
+        Room room = requireRoom(roomId);
+        if (room.getJoinPolicy() != JoinPolicy.OPEN) {
+            throw new ResourceNotFoundException("Phòng này cần mã để vào");
+        }
+        return joinRoom(user, room);
+    }
+
+    @Override
+    @Transactional
+    public void leave(String userEmail, Integer roomId) {
+        User user = requireUser(userEmail);
+        RoomMember member = memberRepository.findById_RoomIdAndId_UserId(roomId, user.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bạn không ở trong phòng này"));
+        if (!member.isActive()) {
+            return;
+        }
+        for (RoomExam re : roomExamRepository.findById_RoomIdOrderByOrderNoAsc(roomId)) {
+            if (submissionRepository.findByExam_ExamIdAndStudent_UserIdAndStatus(
+                    re.getId().getExamId(), user.getUserId(), SubmissionStatus.IN_PROGRESS).isPresent()) {
+                throw new BusinessException("Bạn đang làm bài trong phòng này. Nộp bài trước khi rời phòng.");
+            }
+        }
+        member.deactivate(MemberStatus.LEFT, DbTime.now());
+        memberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public void presence(String userEmail, Integer roomId) {
+        User user = requireUser(userEmail);
+        RoomMember member = memberRepository.findById_RoomIdAndId_UserId(roomId, user.getUserId())
+                .filter(RoomMember::isActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId));
+        member.setLastSeenAt(DbTime.now());
+        memberRepository.save(member);
+    }
+
+    // ── Job nền ────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public int notifyScheduledRooms() {
+        LocalDateTime now = DbTime.now();
+        LocalDateTime grace = now.minusMinutes(NOTICE_GRACE_MINUTES);
+        int sent = 0;
+        for (Room room : roomRepository.findScheduledNeedingNotice(List.of(RoomStatus.OPEN, RoomStatus.RUNNING))) {
+            Integer minutes = examMinutes(room.getRoomId());
+            RoomPhase phase = room.phaseAt(now, minutes);
+            LocalDateTime start = room.getStartTime();
+
+            if (phase == RoomPhase.WAITING && room.getReminderSentAt() == null
+                    && !start.isAfter(now.plusMinutes(REMINDER_MINUTES))) {
+                notificationService.notifyAll(membersOf(room.getRoomId()), NotificationService.Kind.ROOM_REMINDER,
+                        "Phòng \"" + room.getName() + "\" sắp bắt đầu",
+                        "Buổi thi bắt đầu lúc " + start.format(HOUR_DAY) + ". Vào sảnh chờ trước vài phút.",
+                        ROOMS_LINK);
+                room.setReminderSentAt(now);
+                sent++;
+            }
+            if (phase == RoomPhase.IN_PROGRESS && room.getStartNotifiedAt() == null) {
+                if (!start.isBefore(grace)) {
+                    LocalDateTime end = room.endAt(minutes);
+                    notificationService.notifyAll(membersOf(room.getRoomId()), NotificationService.Kind.ROOM_STARTED,
+                            "Phòng \"" + room.getName() + "\" đã bắt đầu làm bài",
+                            "Vào phòng để làm bài" + (end == null ? "." : " — hết giờ lúc " + end.format(HOUR_DAY) + "."),
+                            ROOMS_LINK);
+                    sent++;
+                }
+                room.setStartNotifiedAt(now);
+                if (room.getReminderSentAt() == null) {
+                    room.setReminderSentAt(now);
+                }
+            }
+            if (phase == RoomPhase.ENDED && room.getEndNotifiedAt() == null) {
+                LocalDateTime end = room.endAt(minutes);
+                if (end != null && !end.isBefore(grace)) {
+                    notificationService.notifyAll(membersOf(room.getRoomId()), NotificationService.Kind.ROOM_ENDED,
+                            "Phòng \"" + room.getName() + "\" đã kết thúc",
+                            "Bảng xếp hạng và kết quả của cả phòng đã có.", ROOMS_LINK);
+                    sent++;
+                }
+                room.setEndNotifiedAt(now);
+                if (room.getStartNotifiedAt() == null) room.setStartNotifiedAt(now);
+                if (room.getReminderSentAt() == null) room.setReminderSentAt(now);
+            }
+            roomRepository.save(room);
+        }
+        return sent;
+    }
+
+    // ── Hỗ trợ ─────────────────────────────────────────────────────────────
+
+    private RoomResponse joinRoom(User user, Room found) {
         Room room = roomRepository.findByIdForUpdate(found.getRoomId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng"));
+        LocalDateTime now = DbTime.now();
 
-        Optional<RoomMember> existing =
-                memberRepository.findById_RoomIdAndId_UserId(room.getRoomId(), user.getUserId());
-
+        Optional<RoomMember> existing = memberRepository.findById_RoomIdAndId_UserId(room.getRoomId(), user.getUserId());
         if (existing.isPresent()) {
             RoomMember member = existing.get();
             if (member.getStatus() == MemberStatus.KICKED) {
                 throw new UnauthorizedException("Bạn đã bị mời ra khỏi phòng này");
             }
             if (!member.isActive()) {
-                // Quay lại phòng đã rời: nhận lại đúng ghế cũ.
                 requireAcceptingMembers(room);
                 member.setStatus(MemberStatus.ACTIVE);
                 member.setLeftAt(null);
-                memberRepository.save(member);
             }
+            member.setLastSeenAt(now);
+            memberRepository.save(member);
             return describe(room, user, true);
         }
 
         requireAcceptingMembers(room);
-
-        // Đọc CÓ KHOÁ, không phải đếm thường. Khoá dòng phòng ở trên xếp đúng
-        // thứ tự hai request, nhưng nó KHÔNG làm mới ảnh chụp dữ liệu của
-        // transaction — một câu COUNT thường ở đây vẫn đọc ra con số cũ và cấp
-        // trùng ghế. Xem RoomMemberRepository.findMaxSeatForUpdate.
-        //
-        // Ghế của người đã rời đi vẫn tính là đã cấp: MAX chứ không phải sĩ số.
         int lastSeat = memberRepository.findMaxSeatForUpdate(room.getRoomId());
-        if (!room.hasRoomFor(lastSeat)) {
+        if (!room.hasRoomFor(memberRepository.countActive(room.getRoomId()))) {
             throw new BusinessException("Phòng đã đủ " + room.getCapacity() + " người");
         }
 
@@ -351,149 +749,186 @@ public class RoomServiceImpl implements RoomService {
                 .user(user)
                 .seatNo(lastSeat + 1)
                 .status(MemberStatus.ACTIVE)
+                .lastSeenAt(now)
                 .build();
-
         try {
-            // flush ngay để va chạm UNIQUE nổ ra ở ĐÂY, nơi còn dịch được thành
-            // một câu tiếng Việt tử tế, thay vì lúc commit — chỗ đó đã ra khỏi
-            // service và người dùng chỉ nhận về một trang lỗi 500 trần trụi.
             memberRepository.saveAndFlush(member);
         } catch (DataIntegrityViolationException e) {
-            // Tới được đây nghĩa là hai người vẫn giành được cùng một ghế dù đã
-            // khoá. Ràng buộc UNIQUE là lưới an toàn cuối và nó vừa làm đúng
-            // việc của mình; phần còn lại chỉ là nói cho người dùng biết sự thật.
             log.warn("Tranh ghế ở phòng roomId={}: {}", room.getRoomId(), e.getMessage());
             throw new BusinessException("Phòng vừa hết chỗ, có người vào trước bạn");
         }
-
-        log.info("Vào phòng roomId={} userId={} ghế={}",
-                room.getRoomId(), user.getUserId(), member.getSeatNo());
+        log.info("Vào phòng roomId={} userId={} ghế={}", room.getRoomId(), user.getUserId(), member.getSeatNo());
         return describe(room, user, true);
     }
 
-    @Override
-    @Transactional
-    public void leave(String userEmail, Integer roomId) {
-        User user = requireUser(userEmail);
-        RoomMember member = memberRepository
-                .findById_RoomIdAndId_UserId(roomId, user.getUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bạn không ở trong phòng này"));
-        if (!member.isActive()) {
-            return; // đã rời rồi, không có gì để làm
-        }
-        member.deactivate(MemberStatus.LEFT, DbTime.now());
-        memberRepository.save(member);
-    }
-
-    // ── Hỗ trợ ──────────────────────────────────────────────────────────────
-
-    /** Phòng có nhận người mới không, và có đang trong khung giờ không. */
+    /** Phòng có nhận người mới không: sảnh chờ, hoặc trong khoảng cho vào muộn. */
     private void requireAcceptingMembers(Room room) {
-        if (!room.getStatus().acceptsNewMembers()) {
-            throw new BusinessException(switch (room.getStatus()) {
-                case DRAFT -> "Phòng chưa mở";
-                case RUNNING -> "Phòng đã bắt đầu thi, không nhận thêm người";
-                case CLOSED -> "Phòng đã đóng";
-                default -> "Phòng không nhận thêm người";
-            });
+        LocalDateTime now = LocalDateTime.now();
+        Integer minutes = examMinutes(room.getRoomId());
+        if (room.acceptsMembersAt(now, minutes)) {
+            return;
+        }
+        throw new BusinessException(switch (room.phaseAt(now, minutes)) {
+            case DRAFT -> "Phòng chưa mở";
+            case IN_PROGRESS -> room.getLateJoinMinutes() == null || room.getLateJoinMinutes() == 0
+                    ? "Phòng đã bắt đầu làm bài, không nhận thêm người"
+                    : "Đã quá " + room.getLateJoinMinutes() + " phút đầu giờ thi, phòng không nhận thêm người";
+            case ENDED -> "Phòng thi đã kết thúc";
+            default -> "Phòng không nhận thêm người";
+        });
+    }
+
+    /** Đề trong phòng chỉ đổi được trước giờ làm bài. */
+    private void requireExamsEditable(Room room) {
+        RoomPhase phase = room.phaseAt(LocalDateTime.now(), examMinutes(room.getRoomId()));
+        if (phase == RoomPhase.IN_PROGRESS) {
+            throw new BusinessException("Phòng đang trong giờ làm bài, không đổi đề được");
+        }
+        if (phase == RoomPhase.ENDED) {
+            throw new BusinessException("Phòng thi đã kết thúc, đề được giữ nguyên để xem kết quả");
         }
     }
 
-    /** Không cho mở một phòng rỗng: thí sinh vào rồi chẳng có gì để làm. */
-    private void requireHasExamBeforeOpening(Room room, RoomStatus target) {
-        if (target == RoomStatus.OPEN
-                && roomExamRepository.countById_RoomId(room.getRoomId()) == 0) {
-            throw new BusinessException("Phòng chưa có đề thi nào, chưa mở được");
+    /** Đề của chính người ra đề và đã có câu hỏi. */
+    private Exam requireUsableExam(Integer examId, User owner) {
+        Exam exam = examRepository.findById(examId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
+        if (exam.getCreatedBy() == null || !exam.getCreatedBy().getUserId().equals(owner.getUserId())) {
+            throw new UnauthorizedException("Chỉ dùng được đề thi do chính bạn tạo");
         }
+        if (examQuestionRepository.countByExam_ExamId(examId) == 0) {
+            throw new BusinessException("Đề \"" + exam.getTitle() + "\" chưa có câu hỏi nào");
+        }
+        return exam;
+    }
+
+    private void replaceExam(Room room, Exam exam) {
+        List<RoomExam> current = roomExamRepository.findById_RoomIdOrderByOrderNoAsc(room.getRoomId());
+        if (current.size() == 1 && current.get(0).getId().getExamId().equals(exam.getExamId())) {
+            return;
+        }
+        roomExamRepository.deleteAll(current);
+        roomExamRepository.flush();
+        saveRoomExam(room, exam);
+    }
+
+    private void saveRoomExam(Room room, Exam exam) {
+        roomExamRepository.save(RoomExam.builder()
+                .id(new RoomExamKey(room.getRoomId(), exam.getExamId()))
+                .room(room)
+                .exam(exam)
+                .orderNo(1)
+                .build());
+    }
+
+    private Integer examMinutes(Integer roomId) {
+        return roomExamRepository.findLongestDurationMinutes(roomId);
+    }
+
+    private Room requireRoom(Integer roomId) {
+        return roomRepository.findById(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId));
     }
 
     private Room requireOwnedRoom(Integer roomId, User owner) {
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy phòng thi id=" + roomId));
+        Room room = requireRoom(roomId);
         if (!room.isOwnedBy(owner.getUserId())) {
-            // 404 chứ không 403: người ngoài không cần biết phòng đó có tồn tại.
             throw new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId);
         }
         return room;
     }
 
-    /** Dựng response cho một phòng đơn lẻ, tự đếm các con số cần thiết. */
-    private RoomResponse describe(Room room, User viewer, boolean revealCode) {
-        long members = memberRepository.countActive(room.getRoomId());
-        long exams = roomExamRepository.countById_RoomId(room.getRoomId());
-        RoomMember mine = memberRepository
-                .findById_RoomIdAndId_UserId(room.getRoomId(), viewer.getUserId())
-                .orElse(null);
-        return toResponse(room, viewer, revealCode, members, exams, mine);
+    private SubjectLevel requireLevel(Integer levelId) {
+        return levelRepository.findById(levelId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy trình độ id=" + levelId));
     }
 
-    /**
-     * Dựng response cho cả một danh sách phòng.
-     *
-     * Gộp phần đếm thành hai truy vấn cho toàn bộ danh sách thay vì hai truy vấn
-     * cho mỗi phòng — màn hình này hiện 5–20 phòng cùng lúc.
-     */
+    private void requireFuture(LocalDateTime startTime) {
+        if (!startTime.isAfter(LocalDateTime.now())) {
+            throw new BusinessException("Giờ bắt đầu hẹn trước phải ở tương lai. "
+                    + "Muốn thi ngay thì bấm \"Bắt đầu làm bài\".");
+        }
+    }
+
+    private RoomResponse describe(Room room, User viewer, boolean revealCode) {
+        return toResponses(List.of(room), viewer, revealCode).get(0);
+    }
+
     private List<RoomResponse> toResponses(List<Room> rooms, User viewer, boolean revealCode) {
         if (rooms.isEmpty()) {
             return List.of();
         }
         List<Integer> roomIds = rooms.stream().map(Room::getRoomId).toList();
+        LocalDateTime now = LocalDateTime.now();
 
         Map<Integer, Long> memberCounts = new HashMap<>();
-        for (RoomMemberRepository.RoomHeadcount row
-                : memberRepository.countActiveByRoomIdIn(roomIds)) {
+        for (RoomMemberRepository.RoomHeadcount row : memberRepository.countActiveByRoomIdIn(roomIds)) {
             memberCounts.put(row.getRoomId(), row.getTotal());
         }
+        Map<Integer, Long> onlineCounts = new HashMap<>();
+        for (Object[] row : memberRepository.countOnlineByRoomIdIn(roomIds,
+                now.minusSeconds(RoomMember.ONLINE_WINDOW_SECONDS))) {
+            onlineCounts.put((Integer) row[0], ((Number) row[1]).longValue());
+        }
         Map<Integer, Long> examCounts = new HashMap<>();
-        for (RoomExamRepository.RoomExamCount row
-                : roomExamRepository.countByRoomIdIn(roomIds)) {
-            examCounts.put(row.getRoomId(), row.getTotal());
+        Map<Integer, Exam> examOf = new HashMap<>();
+        for (RoomExam re : roomExamRepository.findWithExamByRoomIdIn(roomIds)) {
+            examCounts.merge(re.getId().getRoomId(), 1L, Long::sum);
+            examOf.putIfAbsent(re.getId().getRoomId(), re.getExam());
+        }
+        Map<Integer, Integer> longest = new HashMap<>();
+        for (Object[] row : roomExamRepository.findLongestDurationByRoomIdIn(roomIds)) {
+            longest.put((Integer) row[0], (Integer) row[1]);
         }
 
-        return rooms.stream().map(room -> {
-            RoomMember mine = memberRepository
-                    .findById_RoomIdAndId_UserId(room.getRoomId(), viewer.getUserId())
+        List<RoomResponse> out = new ArrayList<>(rooms.size());
+        for (Room room : rooms) {
+            RoomMember mine = memberRepository.findById_RoomIdAndId_UserId(room.getRoomId(), viewer.getUserId())
                     .orElse(null);
-            return toResponse(room, viewer, revealCode,
-                    memberCounts.getOrDefault(room.getRoomId(), 0L),
-                    examCounts.getOrDefault(room.getRoomId(), 0L),
-                    mine);
-        }).toList();
+            Exam exam = examOf.get(room.getRoomId());
+            Integer minutes = longest.get(room.getRoomId());
+            boolean isOwner = room.isOwnedBy(viewer.getUserId());
+            boolean showCode = revealCode && (isOwner || (mine != null && mine.isActive()));
+            long memberCount = memberCounts.getOrDefault(room.getRoomId(), 0L);
+            RoomPhase phase = room.phaseAt(now, minutes);
+            SubjectLevel level = room.getLevel();
+
+            out.add(RoomResponse.builder()
+                    .roomId(room.getRoomId())
+                    .name(room.getName())
+                    .code(showCode ? room.getCode() : null)
+                    .ownerName(room.getOwner() == null ? null : room.getOwner().getFullName())
+                    .levelId(level == null ? null : level.getLevelId())
+                    .levelName(level == null ? null : level.getLevelName())
+                    .subjectName(level == null || level.getSubject() == null ? null : level.getSubject().getSubjectName())
+                    .capacity(room.getCapacity())
+                    .memberCount(memberCount)
+                    .seatsLeft(room.seatsLeft(memberCount))
+                    .onlineCount(isOwner ? onlineCounts.getOrDefault(room.getRoomId(), 0L) : null)
+                    .joinPolicy(room.getJoinPolicy())
+                    .status(room.getStatus())
+                    .phase(phase)
+                    .startTime(room.getStartTime())
+                    .endTime(room.endAt(minutes))
+                    .durationMinutes(minutes)
+                    .serverTime(now)
+                    .examId(exam == null ? null : exam.getExamId())
+                    .examTitle(exam == null ? null : exam.getTitle())
+                    .examQuestionCount(exam == null ? null : (int) examQuestionRepository.countByExam_ExamId(exam.getExamId()))
+                    .examCount(examCounts.getOrDefault(room.getRoomId(), 0L))
+                    .instructions(room.getInstructions())
+                    .lateJoinMinutes(room.getLateJoinMinutes())
+                    .lateJoinUntil(room.getStartTime() == null ? null : room.lateJoinUntil(minutes))
+                    .acceptingMembers(room.acceptsMembersAt(now, minutes))
+                    .deletable(isOwner && memberRepository.countSeatsIssued(room.getRoomId()) == 0)
+                    .owner(isOwner)
+                    .myStatus(mine == null ? null : mine.getStatus())
+                    .mySeatNo(mine == null ? null : mine.getSeatNo())
+                    .build());
+        }
+        return out;
     }
 
-    private RoomResponse toResponse(Room room, User viewer, boolean revealCode,
-                                    long memberCount, long examCount, RoomMember mine) {
-        SubjectLevel level = room.getLevel();
-        boolean isOwner = room.isOwnedBy(viewer.getUserId());
-        // Mã phòng chỉ dành cho chủ phòng và thành viên. Lộ mã cho người ngoài
-        // là vô hiệu hoá chính cơ chế vào phòng bằng mã.
-        boolean showCode = revealCode && (isOwner || (mine != null && mine.isActive()));
-
-        return RoomResponse.builder()
-                .roomId(room.getRoomId())
-                .name(room.getName())
-                .code(showCode ? room.getCode() : null)
-                .ownerName(room.getOwner() == null ? null : room.getOwner().getFullName())
-                .levelId(level == null ? null : level.getLevelId())
-                .levelName(level == null ? null : level.getLevelName())
-                .subjectName(level == null || level.getSubject() == null
-                        ? null : level.getSubject().getSubjectName())
-                .capacity(room.getCapacity())
-                .memberCount(memberCount)
-                .seatsLeft(room.seatsLeft(memberCount))
-                .joinPolicy(room.getJoinPolicy())
-                .status(room.getStatus())
-                .startTime(room.getStartTime())
-                .endTime(room.getEndTime())
-                .examCount(examCount)
-                .owner(isOwner)
-                .myStatus(mine == null ? null : mine.getStatus())
-                .mySeatNo(mine == null ? null : mine.getSeatNo())
-                .build();
-    }
-
-    /** Mã ngẫu nhiên, thử lại khi trùng. */
     private String generateUniqueCode() {
         for (int attempt = 0; attempt < CODE_MAX_ATTEMPTS; attempt++) {
             StringBuilder sb = new StringBuilder(CODE_LENGTH);
@@ -505,9 +940,11 @@ public class RoomServiceImpl implements RoomService {
                 return code;
             }
         }
-        // Đụng đây nghĩa là không gian mã đã gần đầy — lúc đó phải nới CODE_LENGTH
-        // chứ không phải thử thêm vài lần nữa.
         throw new BusinessException("Không sinh được mã phòng, vui lòng thử lại");
+    }
+
+    private List<User> membersOf(Integer roomId) {
+        return memberRepository.findActiveMembers(roomId).stream().map(RoomMember::getUser).toList();
     }
 
     private User requireUser(String email) {
@@ -521,5 +958,23 @@ public class RoomServiceImpl implements RoomService {
             throw new UnauthorizedException("Chỉ người ra đề mới mở được phòng thi");
         }
         return user;
+    }
+
+    private User requireStudent(String email) {
+        User user = requireUser(email);
+        if (user.getRole() != Role.STUDENT) {
+            throw new UnauthorizedException("Chỉ học viên mới vào được phòng thi");
+        }
+        return user;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) return null;
+        String t = value.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private static String truncate(String value, int max) {
+        return value.length() <= max ? value : value.substring(0, max);
     }
 }

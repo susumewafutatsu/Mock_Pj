@@ -39,3 +39,6 @@ build/
 *.log
 backup-*.sql
 logs/
+
+# File tải lên khi chạy (audio)
+uploads/

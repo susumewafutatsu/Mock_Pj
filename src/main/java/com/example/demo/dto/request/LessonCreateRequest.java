@@ -7,15 +7,18 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Tạo / sửa một bài học. */
+/** Tạo / sửa một chặng của lộ trình ôn tập. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class LessonCreateRequest {
 
-    @NotBlank(message = "Tên bài học không được để trống")
-    @Size(max = 200, message = "Tên bài học tối đa 200 ký tự")
+    @NotBlank(message = "Tên chặng không được để trống")
+    @Size(max = 200, message = "Tên chặng tối đa 200 ký tự")
     private String title;
+
+    /** Điểm tối thiểu (%) ở bài kiểm tra của chặng để qua chặng. */
+    private Integer minScorePercent;
 
     private LessonType lessonType;
 
@@ -27,9 +30,9 @@ public class LessonCreateRequest {
     /** Bộ thẻ ôn kèm — để trống nếu bài này không cần thẻ nào. */
     private Integer deckId;
 
-    /** Bài kiểm tra cuối bài — cũng không bắt buộc. */
+    /** Bài kiểm tra cuối chặng — không bắt buộc. */
     private Integer examId;
 
-    /** Vị trí trong khoá. Để trống thì xếp xuống cuối. */
+    /** Vị trí trong lộ trình. Để trống thì xếp xuống cuối. */
     private Integer orderNo;
 }

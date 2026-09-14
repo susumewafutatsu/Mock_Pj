@@ -19,22 +19,11 @@ public interface MistakeEntryRepository extends JpaRepository<MistakeEntry, Inte
     /** Dòng cần cập nhật khi thí sinh lại sai đúng câu đó. */
     Optional<MistakeEntry> findByUser_UserIdAndQuestion_QuestionId(String userId, Integer questionId);
 
-    /**
-     * Nạp sẵn cả loạt dòng của một người cho những câu vừa chấm xong.
-     *
-     * Dùng lúc nộp bài: một đề 40 câu mà tra từng câu một là 40 lượt truy vấn
-     * ngay trong transaction nộp bài — đúng lúc cả phòng cùng bấm nộp.
-     */
+    /** Nạp sẵn cả loạt dòng của một người cho những câu vừa chấm xong. */
     List<MistakeEntry> findByUser_UserIdAndQuestion_QuestionIdIn(
             String userId, Collection<Integer> questionIds);
 
-    /**
-     * Hàng đợi ôn tập: câu chưa sửa được, sắp theo mức độ cấp thiết.
-     *
-     * Câu tới hạn xếp trước (NextReviewAt đã qua), trong đó câu sai nhiều lần
-     * lên đầu — sai năm lần rõ ràng đáng ôn trước câu chỉ sai một lần.
-     * Chưa có lịch (NextReviewAt null) cũng coi là tới hạn.
-     */
+    /** Hàng đợi ôn tập: câu chưa sửa được, sắp theo mức độ cấp thiết. */
     @Query(value = """
             SELECT m FROM MistakeEntry m
             JOIN FETCH m.question q
@@ -46,9 +35,7 @@ public interface MistakeEntryRepository extends JpaRepository<MistakeEntry, Inte
               m.wrongCount DESC,
               m.nextReviewAt ASC
             """,
-            // Phải khai countQuery riêng: Spring Data không suy ra được câu đếm
-            // từ một truy vấn có JOIN FETCH — nó giữ nguyên mệnh đề fetch trong
-            // câu COUNT và Hibernate ném lỗi ngay lần gọi đầu tiên.
+            // Phải khai countQuery riêng: Spring Data không suy ra được câu đếm từ một truy vấn có JOIN FETCH.
             countQuery = """
             SELECT COUNT(m) FROM MistakeEntry m
             JOIN m.question q

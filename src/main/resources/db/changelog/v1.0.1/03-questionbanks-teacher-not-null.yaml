@@ -1,18 +1,12 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
-  # QuestionBank.teacher khai báo nullable=false nhưng cột TeacherID
-  # sinh ra từ v1.0.0 vẫn cho NULL. Hibernate validate không kiểm tra
-  # nullability nên sai lệch này im lặng cho tới lúc có dòng NULL thật.
-  # Thêm ràng buộc ngay khi bảng còn sạch.
-  # ─────────────────────────────────────────────────────────────────
+  # QuestionBank.teacher khai báo nullable=false nhưng cột TeacherID sinh ra từ v1.0.0 vẫn cho NULL.
 
   - changeSet:
       id: v1.0.1-03-questionbanks-teacher-not-null
       author: team
       comment: "QuestionBanks.TeacherID: NOT NULL (mọi ngân hàng phải có chủ sở hữu)"
       preConditions:
-        # Nếu DB nào đó còn dòng TeacherID NULL thì bỏ qua changeset thay vì
-        # làm sập lúc khởi động; xử lý dữ liệu xong hãy chạy lại bằng changeset mới.
+        # Nếu DB nào đó còn dòng TeacherID NULL thì bỏ qua changeset thay vì làm sập lúc khởi động.
         - onFail: MARK_RAN
         - onFailMessage: "Còn QuestionBanks.TeacherID NULL — dọn dữ liệu trước khi thêm ràng buộc"
         - sqlCheck:

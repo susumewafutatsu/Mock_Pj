@@ -8,12 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Kết quả một bài đã nộp.
- *
- * Điểm được chấm theo snapshot đáp án của đề thi, nên kết quả này vẫn giải
- * thích được kể cả khi câu hỏi trong ngân hàng đã bị sửa về sau.
- */
+/** Kết quả một bài đã nộp. */
 @Data
 @Builder
 public class ExamResultResponse {
@@ -25,13 +20,7 @@ public class ExamResultResponse {
     /** Lượt làm thứ mấy, đếm từ 1. Trang lịch sử dùng để tách các lần làm cùng một đề. */
     private Integer attemptNumber;
 
-    /**
-     * Người ra đề có cho xem đáp án đúng + giải thích không.
-     *
-     * Tắt thì {@link ResultDetailView#getCorrectAnswerContent()} và
-     * {@code explanation} đều null — client phải dựa vào cờ này để hiện lời giải
-     * thích "người ra đề không mở đáp án cho đề này", thay vì render ô trống.
-     */
+    /** Người ra đề có cho xem đáp án đúng + giải thích không. */
     private boolean reviewAllowed;
 
     /** Số lượt đã dùng / tối đa. {@code maxAttempts} null = không giới hạn. */
@@ -60,4 +49,7 @@ public class ExamResultResponse {
     private boolean awaitingManualGrading;
 
     private List<ResultDetailView> details;
+
+    /** Bảng điểm kiểu JLPT: điểm từng nhóm, tổng 0–180, kết luận Đỗ/Trượt. */
+    private JlptScoreView jlpt;
 }

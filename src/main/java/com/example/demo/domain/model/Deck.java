@@ -6,16 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một bộ thẻ — nhóm từ vựng / chữ Hán được học cùng nhau.
- *
- * {@code owner == null} nghĩa là bộ dựng sẵn của hệ thống, ai cũng học được.
- * Khác null là bộ do một người tự tạo.
- *
- * Cố ý KHÔNG khoá bộ thẻ vào một loại thẻ duy nhất: một bài học thật luôn gồm
- * mấy chữ Hán mới đi kèm mấy từ mới, nên {@link DeckItem} mang loại thẻ chứ
- * không phải bảng này.
- */
+/** Một bộ thẻ — nhóm từ vựng / chữ Hán được học cùng nhau. */
 @Entity
 @Table(name = "Decks")
 @Getter

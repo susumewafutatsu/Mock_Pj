@@ -15,14 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * Quản lý câu hỏi — chỉ người ra đề. Role đã được chặn ở SecurityConfig
- * ({@code /api/teacher/** -> hasRole("TEACHER")}); quyền sở hữu ngân hàng câu
- * hỏi được kiểm tra thêm một lần nữa trong service.
- *
- * Mọi phản hồi bọc trong {@link ApiResponse} theo đúng quy ước của
- * {@link AuthController} — frontend đọc {@code response.data.data}.
- */
+/** Quản lý câu hỏi — chỉ người ra đề. */
 @RestController
 @RequestMapping("/api/teacher/question-banks/{bankId}/questions")
 @RequiredArgsConstructor

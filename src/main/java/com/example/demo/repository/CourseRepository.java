@@ -23,12 +23,7 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             """)
     List<Course> findByAuthor(@Param("authorId") String authorId);
 
-    /**
-     * Hàng đợi duyệt của Admin, hoặc danh sách theo bất kỳ trạng thái nào.
-     *
-     * Khoá chờ lâu nhất lên đầu: người soạn đã đợi rồi thì không nên đợi thêm
-     * chỉ vì có khoá mới hơn chen vào.
-     */
+    /** Hàng đợi duyệt của Admin, hoặc danh sách theo bất kỳ trạng thái nào. */
     @Query("""
             select c from Course c
             left join fetch c.author
@@ -39,11 +34,7 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             """)
     List<Course> findByStatus(@Param("status") CourseStatus status);
 
-    /**
-     * Khoá thí sinh xem được — chỉ PUBLISHED, lọc tuỳ chọn theo trình độ.
-     *
-     * Truyền null cho levelId thì không lọc.
-     */
+    /** Khoá thí sinh xem được — chỉ PUBLISHED, lọc tuỳ chọn theo trình độ. */
     @Query("""
             select c from Course c
             left join fetch c.author
@@ -64,4 +55,18 @@ public interface CourseRepository extends JpaRepository<Course, Integer> {
             where c.courseId in :courseIds
             """)
     List<Course> findAllByIdWithDetails(@Param("courseIds") Collection<Integer> courseIds);
+
+    long countByStatus(CourseStatus status);
+
+    long countByAuthor_UserId(String authorId);
+
+
+    /** Ô tìm kiếm: chỉ lộ trình đã xuất bản. */
+    @Query("""
+            select c from Course c
+            where c.status = com.example.demo.domain.enums.CourseStatus.PUBLISHED
+              and lower(c.title) like lower(concat('%', :q, '%'))
+            order by c.courseId desc
+            """)
+    List<Course> searchPublished(@Param("q") String q, org.springframework.data.domain.Pageable pageable);
 }

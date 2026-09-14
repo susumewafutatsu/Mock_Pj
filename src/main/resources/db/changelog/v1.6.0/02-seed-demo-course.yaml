@@ -1,15 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # KHOÁ HỌC MẪU — context "demo".
-  #
-  # Khác v1.4.0/03 (từ vựng + chữ Hán, nạp cho mọi người): nội dung khoá
-  # học là do người ra đề soạn, nên một cài đặt thật bắt đầu với con số
-  # không khoá học và điều đó là đúng. File này chỉ để dev có sẵn thứ để
-  # bấm vào, và để thử được luồng duyệt.
-  #
-  # Có cả một khoá đã PUBLISHED (thí sinh học được ngay) lẫn một khoá
-  # PENDING (để hàng đợi duyệt của Admin không rỗng).
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.6.0-02-seed-demo-admin

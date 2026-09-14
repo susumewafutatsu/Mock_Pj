@@ -10,17 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Thuật toán giãn cách ôn tập.
- *
- * Test này tồn tại vì đây là chỗ hỏng mà không ai phát hiện ra: lịch ôn sai
- * không làm app văng, không làm request đỏ, nó chỉ khiến người học ôn quá dày
- * hoặc quá thưa — và tới lúc nhận ra thì đã mất vài tuần học. Không có cách
- * nào thấy được bằng mắt trên UI, nên phải chốt bằng test.
- *
- * Toàn bộ chạy không cần Spring, không cần database: {@link Sm2Scheduler} là
- * hàm thuần đúng vì lý do này.
- */
+/** Thuật toán giãn cách ôn tập. */
 class Sm2SchedulerTest {
 
     private static final BigDecimal START_EASE = Sm2Scheduler.DEFAULT_EASE;
@@ -97,12 +87,39 @@ class Sm2SchedulerTest {
     @Test
     @DisplayName("Khoảng cách luôn tiến lên ít nhất một ngày, kể cả khi hệ số chạm sàn")
     void khoangCachKhongBaoGioDungYen() {
-        // Hệ số sàn 1,30 với khoảng cách 1 ngày: 1 × 1,30 làm tròn vẫn ra 1,
-        // tức thẻ sẽ kẹt ở 1 ngày mãi mãi nếu không có chốt chặn.
+        // Hệ số sàn 1,30 với khoảng cách 1 ngày.
         Sm2Scheduler.Outcome outcome =
                 Sm2Scheduler.next(Sm2Scheduler.MIN_EASE, 1, 5, 0, ReviewGrade.HARD);
         assertTrue(outcome.intervalDays() >= 2,
                 "thẻ kẹt ở cùng một khoảng cách sẽ bị ôn lại tới vô tận");
+    }
+
+    @Test
+    @DisplayName("Thẻ mới: Dễ giãn xa hơn ngay từ lần đầu")
+    void theMoiChonDeThiGianXaHon() {
+        assertEquals(1, Sm2Scheduler.next(START_EASE, 0, 0, 0, ReviewGrade.HARD).intervalDays());
+        assertEquals(1, Sm2Scheduler.next(START_EASE, 0, 0, 0, ReviewGrade.GOOD).intervalDays());
+        assertEquals(4, Sm2Scheduler.next(START_EASE, 0, 0, 0, ReviewGrade.EASY).intervalDays());
+    }
+
+    @Test
+    @DisplayName("Lần ôn thứ hai phân biệt Khó < Bình thường < Dễ")
+    void lanHaiPhanBietMuc() {
+        int hard = Sm2Scheduler.next(START_EASE, 1, 1, 0, ReviewGrade.HARD).intervalDays();
+        int good = Sm2Scheduler.next(START_EASE, 1, 1, 0, ReviewGrade.GOOD).intervalDays();
+        int easy = Sm2Scheduler.next(START_EASE, 1, 1, 0, ReviewGrade.EASY).intervalDays();
+        assertEquals(3, hard);
+        assertEquals(6, good);
+        assertEquals(8, easy);
+    }
+
+    @Test
+    @DisplayName("Xem trước khoảng cách: Quên 0, các mức còn lại tăng dần")
+    void xemTruocKhoangCach() {
+        var preview = Sm2Scheduler.preview(START_EASE, 6, 2, 0);
+        assertEquals(0, preview.get(ReviewGrade.AGAIN));
+        assertTrue(preview.get(ReviewGrade.HARD) < preview.get(ReviewGrade.GOOD));
+        assertTrue(preview.get(ReviewGrade.GOOD) < preview.get(ReviewGrade.EASY));
     }
 
     @Test

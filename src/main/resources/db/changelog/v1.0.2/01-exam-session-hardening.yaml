@@ -1,25 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
-  # Gia cố phiên làm bài của học sinh. Ba vấn đề, ba cột/ràng buộc:
-  #
-  #   1. Trùng phiên thi & làm lại nhiều lần
-  #      -> UNIQUE(ExamID, StudentID) trên ExamSubmissions.
-  #         Double-click, mở nhiều tab, gọi lại /start đều không thể
-  #         sinh ra phiên thứ hai. Đây là chốt cuối ở tầng DB, không
-  #         phụ thuộc vào việc tầng service kiểm tra đúng hay không.
-  #
-  #   2. Hết giờ không tự nộp
-  #      -> ExpiresAt: deadline do server chốt ngay lúc bắt đầu thi.
-  #         Client chỉ đọc để đếm ngược; mọi quyết định "còn giờ hay
-  #         không" đều so với cột này. Đổi đồng hồ máy không có tác dụng.
-  #      -> index (Status, ExpiresAt) cho job quét tự động nộp bài.
-  #
-  #   3. Mất mạng / mất tiến độ bài làm
-  #      -> LastActiveAt: heartbeat 15-30s từ client, dùng để phát hiện
-  #         học sinh rớt mạng (AtRiskStatus). KHÔNG dùng để cộng bù giờ.
-  #      -> UNIQUE(SubmissionID, QuestionID) trên SubmissionDetails để
-  #         autosave từng câu theo kiểu upsert.
-  # ─────────────────────────────────────────────────────────────────
+  # Gia cố phiên làm bài của học sinh.
 
   - changeSet:
       id: v1.0.2-01-examsubmissions-session-columns

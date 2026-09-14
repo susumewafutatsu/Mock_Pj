@@ -6,13 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Một bài trong danh sách bài của khoá.
- *
- * Cố ý KHÔNG có {@code content}: danh sách 30 bài mà kèm cả lý thuyết là một
- * response vài trăm KB cho một màn hình chỉ hiện tên bài. Nội dung lấy riêng khi
- * mở từng bài.
- */
+/** Một bài trong danh sách bài của khoá. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -32,9 +26,22 @@ public class LessonSummaryResponse {
     /** Có bộ thẻ ôn kèm không. */
     private boolean hasDeck;
 
-    /** Có bài kiểm tra cuối bài không. */
+    /** Có bài kiểm tra cuối chặng không. */
     private boolean hasExam;
 
-    /** Người đang xem đã hoàn thành bài này chưa. */
+    /** Người đang xem đã qua chặng này chưa. */
     private boolean completed;
+
+    /** Chặng còn khoá: có chặng đứng trước chưa qua. */
+    private boolean locked;
+
+    private Integer examId;
+    private String examTitle;
+    private Integer deckId;
+
+    /** Ngưỡng qua chặng (%) khi chặng có bài kiểm tra. */
+    private Integer minScorePercent;
+
+    /** Điểm tốt nhất (%) của người đang xem ở bài kiểm tra của chặng; null = chưa làm. */
+    private Double bestScorePercent;
 }

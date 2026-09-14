@@ -1,21 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # CHUYỂN DỮ LIỆU LỚP → PHÒNG THI
-  #
-  # File này KHÔNG xoá gì cả. Sau khi chạy xong, Classes và ClassStudents
-  # vẫn còn nguyên và vẫn đọc được — đó là điều kiện để còn đường lùi nếu
-  # phát hiện sai sót. Việc xoá nằm ở file 03, chạy sau khi đã kiểm.
-  #
-  # Ánh xạ:
-  #   Classes        -> Rooms       (Capacity NULL = giữ nguyên tinh thần
-  #                                  lớp cũ: không giới hạn sĩ số)
-  #   ClassStudents  -> RoomMembers (SeatNo cấp theo thứ tự JoinedAt)
-  #   Exams.ClassID  -> RoomExams   (mỗi đề của lớp thành một dòng)
-  #   Exams.ClassID IS NULL -> IsPublic = TRUE  (đề luyện tập tự do cũ)
-  #
-  # RoomID cố ý lấy đúng ClassID cũ: mọi log, ảnh chụp màn hình và đường
-  # dẫn cũ còn đối chiếu được, và nếu phải lùi thì hai bên vẫn khớp số.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.5.0-02-migrate-classes-to-rooms
@@ -23,8 +7,7 @@ databaseChangeLog:
       comment: "Mỗi lớp cũ thành một phòng thi, giữ nguyên ID."
       preConditions:
         - onFail: MARK_RAN
-        # Chỉ chạy khi bảng Classes còn tồn tại (DB mới toanh thì không có gì
-        # để chuyển) và Rooms còn trống (tránh chạy đè lần hai).
+        # Chỉ chạy khi bảng Classes còn tồn tại (DB mới toanh thì không có gì để chuyển) và Rooms còn trống (tránh chạy đè lần hai).
         - tableExists:
             tableName: Classes
         - sqlCheck:

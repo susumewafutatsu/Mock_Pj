@@ -1,11 +1,15 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.request.RoomCreateRequest;
+import com.example.demo.dto.request.RoomDuplicateRequest;
 import com.example.demo.dto.request.RoomJoinRequest;
 import com.example.demo.dto.request.RoomUpdateRequest;
 import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.LeaderboardResponse;
 import com.example.demo.dto.response.RoomMemberResponse;
+import com.example.demo.dto.response.RoomMonitorResponse;
 import com.example.demo.dto.response.RoomResponse;
+import com.example.demo.service.LeaderboardService;
 import com.example.demo.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,42 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Phòng thi — thay cho toàn bộ nhóm endpoint quản lý lớp học cũ.
- *
- * Đặt ở {@code /api/rooms} chứ không dưới {@code /api/teacher} hay
- * {@code /api/student} là có chủ đích: phòng thi là nơi HAI vai gặp nhau. Người
- * ra đề mở phòng và gắn đề, thí sinh vào phòng và làm bài — cùng một tài
- * nguyên, hai góc nhìn. Tách đôi theo vai sẽ sinh ra hai bộ endpoint gần
- * giống hệt nhau cho cùng một thứ.
- *
- * Vì nhánh này chỉ yêu cầu "đã đăng nhập", việc phân quyền nằm ở tầng service:
- * mở phòng đòi vai người ra đề, còn mọi thao tác trên một phòng cụ thể đều
- * kiểm chủ sở hữu. Người không phải chủ phòng nhận 404 chứ không phải 403 —
- * không tiết lộ phòng đó có tồn tại hay không.
- *
- * Người ra đề:
- *   GET    /rooms/mine                  -> phòng tôi mở
- *   POST   /rooms                       -> mở phòng mới
- *   PUT    /rooms/{id}                  -> sửa phòng (mã phòng không sửa được)
- *   DELETE /rooms/{id}                  -> xoá phòng (chỉ khi chưa ai vào)
- *   GET    /rooms/{id}/members          -> ai đang trong phòng
- *   DELETE /rooms/{id}/members/{userId} -> mời một người ra
- *   POST   /rooms/{id}/exams/{examId}   -> gắn đề vào phòng
- *   DELETE /rooms/{id}/exams/{examId}   -> gỡ đề khỏi phòng
- *
- * Thí sinh:
- *   GET    /rooms/joined                -> phòng tôi đang tham gia
- *   GET    /rooms/open                  -> phòng mở, ai cũng vào được
- *   POST   /rooms/join                  -> vào phòng bằng mã
- *   DELETE /rooms/{id}/membership       -> tự rời phòng
- */
+/** Phòng thi — thay cho toàn bộ nhóm endpoint quản lý lớp học cũ. */
 @RestController
 @RequestMapping("/api/rooms")
 @RequiredArgsConstructor
 public class RoomController {
 
     private final RoomService roomService;
+    private final LeaderboardService leaderboardService;
 
     // ── Người ra đề ─────────────────────────────────────────────────────────
 
@@ -88,6 +64,28 @@ public class RoomController {
                                     @AuthenticationPrincipal UserDetails me) {
         roomService.deleteRoom(me.getUsername(), roomId);
         return ApiResponse.success("Đã xoá phòng", null);
+    }
+
+    @GetMapping("/{roomId}")
+    public ApiResponse<RoomResponse> detail(@PathVariable Integer roomId,
+                                            @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(roomService.getRoom(me.getUsername(), roomId));
+    }
+
+    /** Tiến độ làm bài của cả phòng. */
+    @GetMapping("/{roomId}/monitor")
+    public ApiResponse<RoomMonitorResponse> monitor(@PathVariable Integer roomId,
+                                                    @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(roomService.monitor(me.getUsername(), roomId));
+    }
+
+    /** Nhân bản phòng cho buổi thi sau. */
+    @PostMapping("/{roomId}/duplicate")
+    public ApiResponse<RoomResponse> duplicate(@PathVariable Integer roomId,
+                                               @Valid @RequestBody(required = false) RoomDuplicateRequest request,
+                                               @AuthenticationPrincipal UserDetails me) {
+        RoomResponse room = roomService.duplicateRoom(me.getUsername(), roomId, request);
+        return ApiResponse.success("Đã tạo phòng mới. Mã tham gia: " + room.getCode(), room);
     }
 
     @GetMapping("/{roomId}/members")
@@ -121,6 +119,29 @@ public class RoomController {
                 roomService.detachExam(me.getUsername(), roomId, examId));
     }
 
+    /** "Bắt đầu làm bài": sảnh chờ → đang thi, ngay lúc này. */
+    @PostMapping("/{roomId}/start")
+    public ApiResponse<RoomResponse> start(@PathVariable Integer roomId,
+                                           @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã bắt đầu làm bài",
+                roomService.startExam(me.getUsername(), roomId));
+    }
+
+    /** Kết thúc phòng. Đang thi thì thu bài cả phòng ngay và mở bảng xếp hạng. */
+    @PostMapping("/{roomId}/end")
+    public ApiResponse<RoomResponse> end(@PathVariable Integer roomId,
+                                         @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã kết thúc phòng thi",
+                roomService.endExam(me.getUsername(), roomId));
+    }
+
+    /** Bảng xếp hạng + kết quả từng thí sinh, mỗi đề một bảng. */
+    @GetMapping("/{roomId}/leaderboard")
+    public ApiResponse<LeaderboardResponse> leaderboard(@PathVariable Integer roomId,
+                                                        @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(leaderboardService.roomLeaderboard(me.getUsername(), roomId));
+    }
+
     // ── Thí sinh ────────────────────────────────────────────────────────────
 
     @GetMapping("/joined")
@@ -134,18 +155,30 @@ public class RoomController {
         return ApiResponse.success(roomService.browseOpenRooms(me.getUsername()));
     }
 
-    /**
-     * Vào phòng bằng mã.
-     *
-     * Idempotent: đã ở trong phòng thì nhận lại đúng ghế cũ. Phòng hết chỗ trả
-     * 409 — và đó là câu trả lời đúng cho "ai nhanh thì vào".
-     */
+    /** Vào phòng bằng mã. */
     @PostMapping("/join")
     public ApiResponse<RoomResponse> join(@Valid @RequestBody RoomJoinRequest request,
                                           @AuthenticationPrincipal UserDetails me) {
         RoomResponse room = roomService.join(me.getUsername(), request);
         return ApiResponse.success(
                 "Đã vào phòng " + room.getName() + " — ghế số " + room.getMySeatNo(), room);
+    }
+
+    /** Vào phòng công khai không cần mã. */
+    @PostMapping("/{roomId}/join-open")
+    public ApiResponse<RoomResponse> joinOpen(@PathVariable Integer roomId,
+                                              @AuthenticationPrincipal UserDetails me) {
+        RoomResponse room = roomService.joinOpenRoom(me.getUsername(), roomId);
+        return ApiResponse.success(
+                "Đã vào phòng " + room.getName() + " — ghế số " + room.getMySeatNo(), room);
+    }
+
+    /** Báo đang mở trang phòng. */
+    @PostMapping("/{roomId}/presence")
+    public ApiResponse<Void> presence(@PathVariable Integer roomId,
+                                      @AuthenticationPrincipal UserDetails me) {
+        roomService.presence(me.getUsername(), roomId);
+        return ApiResponse.success(null);
     }
 
     @DeleteMapping("/{roomId}/membership")

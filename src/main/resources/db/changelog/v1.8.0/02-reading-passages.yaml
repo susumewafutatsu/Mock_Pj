@@ -1,0 +1,78 @@
+databaseChangeLog:
+  # BÀI ĐỌC (読解)
+
+  - changeSet:
+      id: v1.8.0-05-create-reading-passages
+      author: team
+      comment: "ReadingPassages: đoạn văn dùng chung cho nhiều câu đọc hiểu"
+      changes:
+        - createTable:
+            tableName: ReadingPassages
+            columns:
+              - column:
+                  name: PassageID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              # Thuộc về ngân hàng câu hỏi giống như Questions.
+              - column:
+                  name: BankID
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Title
+                  type: VARCHAR(200)
+              - column:
+                  name: Content
+                  type: LONGTEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+
+        - addForeignKeyConstraint:
+            constraintName: fk_passage_bank
+            baseTableName: ReadingPassages
+            baseColumnNames: BankID
+            referencedTableName: QuestionBanks
+            referencedColumnNames: BankID
+            onDelete: CASCADE
+
+  - changeSet:
+      id: v1.8.0-06-question-passage
+      author: team
+      comment: "Questions.PassageID + snapshot đoạn văn trong ExamQuestions"
+      changes:
+        - addColumn:
+            tableName: Questions
+            columns:
+              - column:
+                  name: PassageID
+                  type: INT
+
+        - addForeignKeyConstraint:
+            constraintName: fk_question_passage
+            baseTableName: Questions
+            baseColumnNames: PassageID
+            referencedTableName: ReadingPassages
+            referencedColumnNames: PassageID
+            onDelete: SET NULL
+
+        - addColumn:
+            tableName: ExamQuestions
+            columns:
+              # Snapshot đoạn văn, cùng lý do với snapshot nội dung câu hỏi.
+              - column:
+                  name: PassageID
+                  type: INT
+              - column:
+                  name: PassageTitle
+                  type: VARCHAR(200)
+              - column:
+                  name: PassageContent
+                  type: LONGTEXT

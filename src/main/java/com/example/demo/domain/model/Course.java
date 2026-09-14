@@ -10,20 +10,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
-/**
- * Một khoá học — danh sách bài học lý thuyết có thứ tự.
- *
- * Cố ý đơn giản: đọc bài, bấm hoàn thành, tiến độ tính bằng số bài xong chia
- * tổng số bài. Không có khối nội dung ghép, không đo thời gian đọc.
- *
- * Vì sao có khoá học khi đã có bộ thẻ ({@link Deck}): thẻ lật chỉ hợp với từ
- * vựng — một từ ứng một nghĩa. Ngữ pháp cần một trang giải thích cấu trúc, cách
- * nối và sắc thái; chữ Hán cần mặt chữ, âm On/Kun, bộ thủ và từ ghép. Không thứ
- * nào trong hai thứ đó nhét vừa mặt sau một tấm thẻ.
- *
- * Quyền: người ra đề soạn, Admin duyệt. Xem {@link CourseStatus} về lý do tách
- * hai vai.
- */
+/** Một khoá học — danh sách bài học lý thuyết có thứ tự. */
 @Entity
 @Table(name = "Courses")
 @Getter
@@ -88,11 +75,7 @@ public class Course {
         return status == CourseStatus.PUBLISHED;
     }
 
-    /**
-     * Gửi duyệt. Chỉ đi được từ DRAFT hoặc REJECTED.
-     *
-     * @throws IllegalStateException nếu trạng thái hiện tại không cho phép
-     */
+    /** Gửi duyệt. Chỉ đi được từ DRAFT hoặc REJECTED. */
     public void submitForReview() {
         if (status != CourseStatus.DRAFT && status != CourseStatus.REJECTED) {
             throw new IllegalStateException("Khoá học đang ở trạng thái " + status);
@@ -117,12 +100,7 @@ public class Course {
         reviewNote = note;
     }
 
-    /**
-     * Đánh dấu nội dung vừa bị sửa.
-     *
-     * Khoá đã xuất bản mà sửa thì phải quay lại hàng đợi duyệt: nội dung đã có
-     * người đang học dở không được đổi sau lưng họ mà không ai xem lại.
-     */
+    /** Đánh dấu nội dung vừa bị sửa. */
     public void markContentChanged() {
         if (status == CourseStatus.PUBLISHED) {
             status = CourseStatus.PENDING;

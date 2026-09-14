@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.domain.enums.QuestionType;
 import com.example.demo.domain.model.*;
 import com.example.demo.dto.request.ExamQuestionSelection;
 import com.example.demo.exception.BusinessException;
@@ -27,14 +28,14 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
     private final ExamSubmissionRepository submissionRepository;
     private final UserRepository userRepository;
     private final ExamRedisService examRedis;
+    private final ExamSectionRepository examSectionRepository;
 
     @Override
     @Transactional
     public int attachQuestions(Integer examId, List<ExamQuestionSelection> selections,
                                String teacherEmail) {
         Exam exam = requireOwnedExam(examId, teacherEmail);
-        // có 1 lỗi ẩn là trong khoảng thời gian hệ thống check xong 
-        // mà có sinh viên nộp bài mà lúc đó người ra đề lại sửa thì sẽ có lỗi
+        // có 1 lỗi ẩn là trong khoảng thời gian hệ thống check xong mà có sinh viên nộp bài mà lúc đó người ra đề lại sửa thì sẽ có lỗi.
         if (submissionRepository.existsByExamExamId(examId)) {
             throw new BusinessException("Đề đã có thí sinh làm bài, không thể thêm câu hỏi");
         }
@@ -55,6 +56,12 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
                 throw new BusinessException(
                         "Câu hỏi id=" + source.getQuestionId() + " đã bị xoá khỏi ngân hàng");
             }
+            // JLPT không có câu tự luận, và hệ thống cũng chưa có ai chấm nó.
+            if (source.getQuestionType() == QuestionType.ESSAY) {
+                throw new BusinessException(
+                        "Câu tự luận không đưa vào đề thi được (JLPT không có dạng này). "
+                        + "Câu id=" + source.getQuestionId() + ". Hãy để dành nó cho phần luyện tập.");
+            }
 
             ExamQuestion examQuestion = ExamQuestion.builder()
                     .id(new ExamQuestionKey(examId, source.getQuestionId()))
@@ -62,6 +69,7 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
                     .question(source)
                     .points(sel.getPoints())
                     .questionOrder(sel.getQuestionOrder() != null ? sel.getQuestionOrder() : ++order)
+                    .section(resolveSection(examId, sel.getSectionId()))
                     .build();
             examQuestion.captureFrom(source);
             examQuestionRepository.save(examQuestion);
@@ -75,13 +83,27 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
         return added;
     }
 
+    /** Phần thi mà câu sẽ nằm vào. */
+    private ExamSection resolveSection(Integer examId, Integer sectionId) {
+        if (sectionId == null) {
+            return null;
+        }
+        ExamSection section = examSectionRepository.findById(sectionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy phần thi id=" + sectionId));
+        if (!section.getExam().getExamId().equals(examId)) {
+            throw new BusinessException("Phần thi id=" + sectionId
+                    + " không thuộc đề thi id=" + examId);
+        }
+        return section;
+    }
+
     @Override
     @Transactional
     public void refreshSnapshot(Integer examId, Integer questionId, String teacherEmail) {
         requireOwnedExam(examId, teacherEmail);
 
-        // Mốc không thể vượt qua: một khi có bài làm, snapshot là bằng chứng
-        // của điểm số đã chấm. Sửa nó sẽ làm kết quả cũ không giải thích được.
+        // Mốc không thể vượt qua: một khi có bài làm, snapshot là bằng chứng của điểm số đã chấm.
         if (submissionRepository.existsByExamExamId(examId)) {
             throw new BusinessException(
                     "Đề đã có thí sinh làm bài. Không thể cập nhật lại nội dung câu hỏi trong đề này. "
@@ -121,19 +143,7 @@ public class ExamSnapshotServiceImpl implements ExamSnapshotService {
         evictPaperCache(examId);
     }
 
-    /**
-     * Bỏ bản cache đề thi trong Redis sau khi cấu trúc đề đổi.
-     *
-     * Chỉ xoá SAU KHI transaction commit. Xoá ngay trong thân method thì có một
-     * kẽ hở: cache vừa trống, một thí sinh vào phòng thi nạp lại cache từ dữ
-     * liệu CŨ (thay đổi chưa commit), rồi transaction mới commit — cache lại sai
-     * và lần này không còn ai đi xoá nữa.
-     *
-     * Ba method sửa đề ở lớp này đều đã chặn khi đề có bài làm, nên trên thực tế
-     * hiếm khi có cache để xoá. Vẫn gọi vì đây là nơi duy nhất biết đề vừa đổi:
-     * ràng buộc kia là quy tắc nghiệp vụ, có thể nới ra sau, còn cache sai thì
-     * thí sinh làm nhầm đề.
-     */
+    /** Bỏ bản cache đề thi trong Redis sau khi cấu trúc đề đổi. */
     private void evictPaperCache(Integer examId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             examRedis.evictPaper(examId);

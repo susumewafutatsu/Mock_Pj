@@ -22,9 +22,7 @@ public class Answer {
     @JoinColumn(name = "QuestionID", nullable = false)
     private Question question;
 
-    // @Lob của Hibernate 6 map String thành CLOB dài 255 (tinytext trong MySQL),
-    // trong khi changelog tạo LONGTEXT -> validate báo lệch kiểu.
-    // LONGVARCHAR là kiểu ứng với LONGTEXT nên hai bên khớp nhau.
+    // @Lob của Hibernate 6 map String thành CLOB dài 255 (tinytext trong MySQL)
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "AnswerContent", nullable = false)
     private String answerContent;

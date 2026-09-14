@@ -37,13 +37,7 @@ public class ExamSubmission {
     @JoinColumn(name = "StudentID", nullable = false)
     private User student;
 
-    /**
-     * Lượt làm thứ mấy của thí sinh này trên đề này, đếm từ 1.
-     *
-     * Cùng với ExamID + StudentID tạo thành khoá UNIQUE — đó là chốt cuối chống
-     * double-click / nhiều tab sinh ra hai phiên cho cùng một lượt. Số lượt tối
-     * đa nằm ở {@link Exam#getMaxAttempts()}, do tầng service kiểm.
-     */
+    /** Lượt làm thứ mấy của thí sinh này trên đề này, đếm từ 1. */
     @Column(name = "AttemptNumber", nullable = false)
     @Builder.Default
     private Integer attemptNumber = 1;
@@ -76,23 +70,11 @@ public class ExamSubmission {
 
     // ── Phiên làm bài ──────────────────────────────────────────────────────
 
-    /**
-     * Deadline của phiên thi, do server chốt một lần duy nhất lúc bắt đầu:
-     * min(StartedAt + DurationMinutes, Exam.EndTime).
-     *
-     * Đây là mốc thời gian duy nhất có thẩm quyền. Client chỉ nhận cột này về
-     * để đếm ngược; chỉnh đồng hồ máy không làm thay đổi thời gian còn lại.
-     * Cột này KHÔNG được nới ra khi thí sinh mất mạng — heartbeat chỉ dùng để
-     * phát hiện rớt mạng, không dùng để bù giờ.
-     */
+    /** Deadline của phiên thi, do server chốt một lần duy nhất lúc bắt đầu. */
     @Column(name = "ExpiresAt")
     private LocalDateTime expiresAt;
 
-    /**
-     * Lần cuối client còn liên lạc được với server (heartbeat 15-30 giây/lần).
-     * Dùng để suy ra {@link #atRiskStatus}: thí sinh im lặng quá lâu trong khi
-     * phiên vẫn IN_PROGRESS thì rất có thể đã rớt mạng hoặc thoát đột ngột.
-     */
+    /** Lần cuối client còn liên lạc được với server (heartbeat 15-30 giây/lần). */
     @Column(name = "LastActiveAt")
     private LocalDateTime lastActiveAt;
 

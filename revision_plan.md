@@ -575,32 +575,68 @@ Hiện cả ba đi chung một luồng `startOrResume → saveAnswer → submit`
 tế dồn cục ở đầu và cuối giờ → **đỉnh 50–100 write/giây**, cộng heartbeat. MySQL đơn
 node sẽ nghẽn ở phút cuối — đúng lúc không được phép hỏng.
 
-### Kiến trúc chốt (3 tầng)
+### Kiến trúc chốt (3 tầng) — tầng 1 và 2 ✅ ĐÃ LÀM XONG
 
-**Tầng 1 — client, `sessionStorage`:**
-- Mỗi thay đổi ghi ngay vào `sessionStorage['exam:{submissionId}:draft']`. Tức thời,
-  0 request, sống sót qua F5.
-- **Chọn `sessionStorage` chứ không `localStorage`**, và lý do đúng là lý do người
-  hướng dẫn nêu: `sessionStorage` gắn với **một tab** — mở tab/cửa sổ mới là một
-  session mới rỗng, đóng tab là tự xoá. Nó khớp đúng ràng buộc nghiệp vụ "một lượt
-  làm bài = một tab", và không để lại bài làm của người trước trên máy dùng chung
-  (phòng máy trường học) — thứ `localStorage` chắc chắn sẽ để lại.
-- `localStorage` **chỉ** giữ: access/refresh token (đã đúng như hiện tại) và cờ
-  `exam:active = {examId, submissionId}` để tab mới biết đang có phiên dở — phục vụ
-  cơ chế lease ở §7.2.
-- **Bản nháp client không bao giờ là nguồn sự thật.** Vào lại phòng thì server trả
-  đáp án đã lưu; nháp chỉ bù những thay đổi chưa kịp gửi và có `updatedAt` để so —
-  mới hơn thì hỏi lại người dùng, không tự ghi đè.
+**Tầng 1 — client, `localStorage`** (`utils/examDraft.js`):
+- Mỗi thao tác ghi ngay vào `localStorage['exam:draft:{submissionId}']`. Tức thời,
+  0 request, sống qua F5, qua tab bị trình duyệt gỡ khỏi bộ nhớ, **và qua tắt hẳn
+  trình duyệt**.
+- **Đổi quyết định cũ: dùng `localStorage`, không dùng `sessionStorage`.** Bản trước
+  chọn `sessionStorage` để không để lại bài trên máy dùng chung. Nhưng
+  `sessionStorage` bị xoá khi đóng hẳn trình duyệt — đúng lúc cần nó nhất: thí sinh
+  tắt máy khi còn vài câu chưa kịp gửi, mở lại trong giờ thì phải còn.
+  Rủi ro máy dùng chung được xử lý bằng cách giữ **ít nhất có thể, trong thời gian
+  ngắn nhất có thể**:
+  - Nháp **chỉ chứa câu chưa được server xác nhận** — không phải toàn bộ bài.
+  - Xoá khi: server xác nhận câu đó · nộp bài · phiên đóng (409) · quá hạn phiên ·
+    **đăng xuất** (`authService.logout` bắn nốt nháp lên server rồi mới xoá).
+- **Bản nháp không bao giờ là nguồn sự thật.** Vào lại phòng thì lấy đáp án từ
+  server, nháp chỉ phủ lên những câu chưa gửi. Mỗi câu trong nháp mang `stagedAt` —
+  thời điểm sửa **quy về giờ server** (lệch giờ đo từ `serverTime` của mỗi response).
+  Server có `answeredAt` muộn hơn `stagedAt` quá 2 giây → thí sinh đã sửa câu đó ở
+  máy khác sau đó → **giữ bản server, bỏ nháp** và báo cho thí sinh biết. Dung sai 2
+  giây vì cột DATETIME làm tròn phần lẻ giây (đã thấy thật: `36.66` → `37`).
+- Nháp mang `submissionId`, và lô gửi lên cũng mang nó: server trả 409 nếu không
+  khớp lượt đang mở. Không có chốt này, nháp sót của **lượt 1** sẽ bị ghi vào **lượt
+  2** cùng đề (server tìm phiên theo đề + thí sinh, không theo lượt).
 
-**Tầng 2 — gửi theo lô, không gửi từng phím:**
-- Bỏ "bấm là gửi". Gom đáp án bẩn vào hàng đợi, flush khi: mỗi **5 giây** · chuyển câu
-  · tab bị ẩn · mạng có lại · bấm nộp.
-- Endpoint mới `PUT /api/student/exams/{id}/answers:batch` nhận `List<AnswerPayload>`
-  → **giảm ~10 lần số request**. Giữ endpoint đơn lẻ cho tương thích, đánh dấu deprecated.
-- Hàng đợi có retry backoff (1s→2s→4s→8s, tối đa 5 lần) và hiển thị "n câu chưa lưu".
-- **Flush lúc thoát bằng `navigator.sendBeacon`** trong `pagehide` /
-  `visibilitychange: hidden` — `fetch` thường bị trình duyệt huỷ khi tab đóng,
-  `sendBeacon` thì không. Đây chính là chỗ bịt lỗ mất bài khi thoát đột ngột (§7.1).
+**Tầng 2 — gửi theo lô** (`hooks/useAnswerSync.js`):
+- Bỏ "bấm là gửi". Quy tắc gửi lô:
+
+  | Khi nào | Vì sao |
+  |---|---|
+  | Chậm nhất **10 giây** sau thay đổi *đầu tiên* chưa gửi | Đếm từ thay đổi đầu, không phải debounce — gõ tự luận liên tục cũng không hoãn mãi |
+  | Đủ **10 câu** chưa gửi | Không để lô phình to |
+  | **Phút cuối** (≤ 60 giây): gửi sau 1 giây | Đáp án tới server sau deadline là không được tính |
+  | Tab bị ẩn / trang đóng | Xem §7.1, §7.5 |
+  | Có mạng lại · tab hiện lại mà còn câu chưa gửi | |
+  | Bấm nộp | Không gửi lô riêng — nháp đi kèm luôn trong request nộp |
+
+  Bỏ ý "flush khi chuyển câu" của bản trước: thí sinh làm một câu rồi chuyển câu,
+  nên quy tắc đó thực chất quay về một request mỗi câu.
+- Endpoint mới `PUT /api/student/exams/{id}/answers/batch` nhận
+  `{ submissionId, answers[] }`, tối đa 200 câu, **cả lô một transaction**. Endpoint
+  đơn lẻ giữ cho tương thích.
+- **Kiểm hết cả lô rồi mới ghi.** Các method phiên thi khai báo
+  `noRollbackFor = BusinessException` (để việc tự nộp khi hết giờ không bị hoàn tác),
+  nên nếu kiểm-ghi xen kẽ thì câu thứ ba sai sẽ để lại hai câu đầu đã ghi — lô bị lưu
+  một nửa. Đường `submit` có cùng lỗi và đã sửa luôn.
+- Lỗi mạng / 5xx: thử lại lùi dần 2s → 4s → … → 30s, không giới hạn số lần — nháp
+  chỉ bị xoá khi server xác nhận nên thử bao nhiêu lần cũng không mất gì. 4xx: gửi lẻ
+  từng câu để tách câu hỏng ra, không để một câu chặn cả hàng đợi.
+- Mỗi câu có `rev`: câu bị sửa tiếp **trong lúc lô đang bay** thì không bị xoá khỏi
+  nháp khi lô đó được xác nhận, lô sau sẽ gửi bản mới.
+- **Gửi lúc thoát bằng `fetch(..., { keepalive: true })`, không phải `sendBeacon`.**
+  `sendBeacon` không gắn được header `Authorization` (API xác thực bằng Bearer), và
+  front-end khác origin với back-end nên body JSON qua `sendBeacon` bị CORS chặn.
+  `keepalive` có cùng đặc tính "trình duyệt không huỷ khi trang đóng" mà vẫn gửi được
+  header. Giới hạn 64KB — lô lớn hơn thì nằm lại trong nháp, lần sau gửi thường.
+- Kèm theo: `SecurityConfig` thêm `setMaxAge(3600)` cho CORS. Trước đó Spring không
+  gửi `Access-Control-Max-Age`, nên request keepalive lúc đóng tab phải chờ thêm một
+  vòng preflight OPTIONS đúng lúc trang không còn thời gian.
+- Trạng thái trên thanh trên: *Đang gửi… · Đã lưu trên máy, chờ gửi n câu · n câu
+  chưa gửi được · Đã lưu*. Ô câu hỏi **chỉ tô vàng khi gửi thất bại** — chờ tới lượt
+  gửi là bình thường, đáp án đã an toàn trên máy.
 
 **Tầng 3 — server, Redis là nơi ghi trước:**
 - `saveAnswerBatch` ghi vào Redis hash `exam:answers:{submissionId}` (đã có sẵn
@@ -636,11 +672,19 @@ node sẽ nghẽn ở phút cuối — đúng lúc không được phép hỏng.
 
 | Tình huống | Hệ thống làm gì |
 |---|---|
-| Đóng tab / F5 | `beforeunload` cảnh báo; `pagehide` + `sendBeacon` đẩy nốt đáp án chưa gửi |
-| Vào lại trong giờ | `POST /start` idempotent → trả lại phiên cũ, đáp án cũ, giờ còn lại theo server |
-| Mất mạng | Hàng đợi client giữ đáp án, retry backoff; mất heartbeat > 90s → `AtRiskStatus = true`, người ra đề thấy đèn đỏ |
-| Không quay lại tới hết giờ | Job `autoSubmitExpired` (30s/lần) tự nộp, `AutoSubmitted = true`, chấm trên những gì đã lưu |
-| Vào lại sau khi hết giờ | `409 SESSION_CLOSED` + chuyển thẳng sang trang kết quả |
+| Đóng tab / F5 / tắt hẳn trình duyệt | `beforeunload` cảnh báo; `visibilitychange: hidden` + `pagehide` bắn nốt nháp bằng `fetch keepalive` ✅ |
+| Tắt ngang (sập nguồn, kill tiến trình) | Không kịp bắn gì. Nháp vẫn nằm trong `localStorage` ✅ |
+| Mở lại trong giờ, vào lại phòng | `POST /start` idempotent → phiên cũ + đáp án server, **phủ nháp chưa gửi lên trên** rồi đẩy ngay; báo "Đã khôi phục n câu" ✅ |
+| Mở lại trong giờ nhưng **không** vào lại phòng | Trang chủ thí sinh (`ExamList`) tự đẩy nháp còn sót lên server (`pushLeftoverDrafts`) ✅ |
+| Mất mạng | Nháp giữ đáp án, thử lại lùi dần; mất heartbeat > 90s → `AtRiskStatus = true`, người ra đề thấy đèn đỏ |
+| Không quay lại tới hết giờ | Job `autoSubmitExpired` (30s/lần) tự nộp, `AutoSubmitted = true`, chấm trên những gì **server đã có** |
+| Vào lại sau khi hết giờ | 409 → hiện thông báo của server; nháp của đề đó bị xoá (không còn lượt nào nhận nó) ✅ |
+
+**Giới hạn phải nói thẳng khi bảo vệ:** thí sinh tắt ngang *và không bao giờ mở lại
+trong giờ* thì những câu chưa kịp gửi mất — tối đa **10 giây** thao tác cuối (1 giây ở
+phút cuối). Đó là cái giá của việc gửi theo lô thay vì từng câu, và là cái giá chấp
+nhận được: đổi lại số request giảm cả chục lần. Đóng tab / tắt trình duyệt *bình
+thường* thì không mất gì, vì trình duyệt luôn bắn `visibilitychange: hidden` trước.
 
 **Bổ sung cần làm** (phần trên đã có, phần dưới chưa):
 - `ExamSessionEvent { submissionId, type, occurredAt, meta }` với type
@@ -673,6 +717,26 @@ node sẽ nghẽn ở phút cuối — đúng lúc không được phép hỏng.
 Lưu ý: freeze là **freeze đồng hồ hiển thị của tab đó**, không phải freeze phiên thi.
 Server vẫn đếm giờ. Phải nói rõ điều này trên overlay để thí sinh không hiểu nhầm là
 được tạm dừng bài.
+
+### 7.5 Tab chạy nền — trình duyệt tiết kiệm tài nguyên ✅ ĐÃ LÀM XONG
+
+Thí sinh chuyển sang tab khác, thu nhỏ cửa sổ, hay gập laptop thì trình duyệt làm
+bốn việc với tab phòng thi, mỗi việc cần một cách xử lý:
+
+| Trình duyệt làm gì | Ảnh hưởng | Xử lý |
+|---|---|---|
+| Tiết chế timer: tối đa 1 lần/giây khi ẩn; Chrome dồn còn **1 lần/phút** sau 5 phút ẩn | Hẹn gửi lô 10 giây có khi thành vài phút; heartbeat 20s thành 60s | Gửi lô **ngay lúc tab bị ẩn** (`visibilitychange: hidden`), không đợi hẹn. Heartbeat 60s vẫn dưới ngưỡng 90s nên không bị báo mất kết nối oan |
+| Đóng băng tab (Page Lifecycle `freeze`) | JS dừng hẳn, không heartbeat | Nháp đã gửi lúc ẩn. Server đánh dấu `AtRisk` sau 90s — đúng sự thật, em không còn ở đó. Quay lại → heartbeat → tắt cờ |
+| **Gỡ tab khỏi bộ nhớ** (Memory Saver, máy thiếu RAM) | Quay lại là trang tải lại từ đầu, mất sạch state React | `POST /start` vào lại phiên + nháp trong `localStorage` còn nguyên. Nhận ra bằng `document.wasDiscarded` và báo *"Trình duyệt đã tải lại trang này để tiết kiệm bộ nhớ…"* để thí sinh không hoảng |
+| Máy ngủ (gập laptop) | `performance.now()` **đứng yên** lúc máy ngủ trên một số nền tảng → đồng hồ trong tab "còn" thừa đúng bằng thời gian ngủ | Tab hiện lại (`visibilitychange: visible`) hoặc khôi phục từ back/forward cache (`pageshow.persisted`) → **gọi heartbeat ngay**, chỉnh đồng hồ theo server, không đợi nhịp 20 giây |
+
+Đồng hồ **không** dừng khi tab nằm nền — server vẫn đếm. Hết giờ trong lúc tab nằm
+nền thì job của server tự nộp; quay lại tab là heartbeat nhận `autoSubmitted` và
+đóng phòng.
+
+Không chuyển heartbeat sang Web Worker (worker ít bị tiết chế hơn): 1 lần/phút đã
+đủ dưới ngưỡng 90 giây, và worker không cứu được trường hợp tab bị đóng băng hay bị
+gỡ — hai trường hợp duy nhất thật sự gây mất nhịp.
 
 ### 7.3 Concurrency — bảng rủi ro và chốt chặn
 
@@ -787,7 +851,7 @@ Thứ tự đặt theo **phụ thuộc kỹ thuật**, không theo mức độ d
 | 4 | `Exam.mode` + `ExamSection` + `JlptSkill` (đổi schema sớm, tránh migrate lại) | §4.1, §5 | B |
 
 ### Sprint 2 (tuần 2) — Phòng thi vững
-| 5 | Autosave theo lô + Redis write-through + `sendBeacon` | §6 | C |
+| 5 | ~~Autosave theo lô + `fetch keepalive`~~ ✅ · Redis write-behind | §6 | C |
 | 6 | Lease đa tab + BroadcastChannel + đóng băng tab cũ | §7.2 | C |
 | 7 | `ExamSessionEvent` + banner "bài đang làm dở" | §7.1 | C |
 | 8 | Xáo đề theo seed, rate limit, ShedLock, submit idempotent | §7.3–7.4 | A |
@@ -868,12 +932,118 @@ nhật ký học (§3.4d) → AI chấm nháp (§8 bước 4, chấm tay vẫn c
 |---|---|---|
 | Học ôn tập theo lộ trình chưa có | §3.3, §3.4 | ✅ Có khoá học (ngữ pháp/kanji), sổ tay câu sai, SRS từ vựng · lộ trình gợi ý tự động chưa |
 | Trọng tâm tiếng Nhật, có xử lý riêng | §4 | Mới có seed môn / level |
-| Thoát trình duyệt giữa lúc thi | §7.1 | Nền tốt; thiếu sendBeacon + banner + event log |
+| Thoát trình duyệt giữa lúc thi | §7.1 | ✅ Bắn nốt nháp bằng `fetch keepalive`, khôi phục nháp khi mở lại, đẩy nháp sót từ trang chủ · còn thiếu banner "bài đang dở" + event log |
+| Chuyển tab → trình duyệt tiết kiệm tài nguyên | §7.5 | ✅ Gửi ngay khi ẩn tab, hỏi lại server khi hiện tab, xử lý tab bị gỡ khỏi bộ nhớ |
 | Mỗi người 1 lộ trình; bỏ lớp; tìm kiếm / bookmark / ghi chú | §2, §3 | ✅ Bỏ lớp xong · lộ trình/tìm kiếm/bookmark chưa |
-| Nhấn lưu luôn đáp án, chưa scale | §6 | Đang lưu từng câu thẳng MySQL |
-| sessionStorage vs localStorage | §6 tầng 1 | Chưa dùng; quyết định đã chốt |
+| Nhấn lưu luôn đáp án, chưa scale | §6 | ✅ Nháp localStorage + gửi theo lô (tầng 1–2) · Redis write-behind (tầng 3) và đo tải chưa |
+| sessionStorage vs localStorage | §6 tầng 1 | ✅ Chọn `localStorage` (đổi so với bản trước — lý do ở §6) |
 | Chưa bàn kỹ security / concurrency | §7.3, §7.4 | Có nền; thiếu lease, xáo đề, rate limit, ShedLock |
 | Tab mới → tab cũ freeze | §7.2 | Chưa có |
 | "tạo kì thi mới" sai tên | §1 | ✅ Đã đổi toàn bộ sang "bài thi" |
 | Bỏ lớp → user group giới hạn người, ai nhanh thì vào | §2 | ✅ Đã bỏ Lớp, thay bằng Phòng thi có sức chứa |
 | Luyện thi / phòng thi thử / chấm tự luận | §5, §8 | Chấm tự luận **thiếu hoàn toàn** |
+
+---
+
+## 12. Phản hồi đợt 2 — ✅ ĐÃ LÀM XONG
+
+| Phản hồi | Đã làm |
+|---|---|
+| Tạo khoá học không ổn, nên là **lộ trình ôn tập** | §12.1 |
+| Tạo bài thi cần **bộ lọc** bộ câu hỏi theo mức độ | §12.2 |
+| Mở phòng rồi chỉ **bấm bắt đầu làm bài** hoặc **tới giờ hẹn** mới làm được | §12.3 |
+| Hết giờ thì hiện **bảng xếp hạng** + kết quả thí sinh trong phòng | §12.4 |
+| Đề tự do cũng hiện **kết quả xếp hạng** | §12.4 |
+| Bỏ "Thao tác nhanh" / "Cần xử lý", dùng **thuật ngữ ôn luyện thi** | §12.5 |
+
+### 12.1 Khoá học → lộ trình ôn tập
+
+Khác biệt nằm ở **luật đi**, không ở cái tên:
+
+- **Chặng mở tuần tự** — chặng sau khoá cho tới khi chặng trước đã qua. Server chặn cả
+  mở chặng lẫn bấm qua chặng (409 kèm tên chặng phải qua trước).
+- **Chặng có bài kiểm tra thì phải đạt mới qua.** Ngưỡng `MinScorePercent` đặt theo
+  từng chặng, mặc định 60%; điểm tính là lượt tốt nhất. Lộ trình đo *độ sẵn sàng thi*,
+  không đo việc đã bấm "đọc xong".
+- **Bài kiểm tra của chặng phải là đề tự do (công khai)** — đề chỉ nằm trong phòng thì
+  người theo lộ trình không vào làm được và kẹt vĩnh viễn ở chặng đó. Server từ chối gắn.
+- Tác giả và Admin không bị khoá chặng (họ soạn / duyệt, không đi lộ trình).
+- Bảng giữ nguyên tên `Courses` / `CourseLessons` (migration `v1.7.0/02` chỉ thêm cột
+  `MinScorePercent`), đường dẫn API giữ nguyên — đổi tên là một đợt chuyển dữ liệu không
+  mang lại gì cho người dùng. Mọi chữ người dùng nhìn thấy đã đổi: lộ trình / chặng /
+  qua chặng / bắt đầu lộ trình.
+
+### 12.2 Bộ lọc câu hỏi khi soạn đề
+
+Trong form tạo đề / gắn câu hỏi: **trình độ (N5…N1) → bộ câu hỏi** (có tuỳ chọn "tất cả
+bộ của trình độ" để soạn đề tổng hợp) **→ mức độ** (5 mức, mỗi mức ghi sẵn số câu còn
+lại) **→ dạng câu → tìm nội dung**. "Chọn n câu đang lọc" chỉ tick những câu đang hiện.
+Dòng tóm tắt nói cơ cấu đề đang soạn: *"Đã chọn 12 câu — 4 dễ · 6 trung bình · 2 khó"*.
+
+### 12.3 Phòng thi: sảnh chờ → bắt đầu làm bài
+
+Pha của phòng tính từ trạng thái + giờ (`RoomPhase`), không lưu cột — phòng hẹn giờ phải
+tự vào thi và tự hết giờ mà không cần job canh từng giây.
+
+| Pha | Vào phòng | Làm bài | Bảng xếp hạng (thí sinh) |
+|---|---|---|---|
+| Nháp | ✗ | ✗ | ✗ |
+| **Sảnh chờ** (đã mở, chưa tới giờ) | ✓ | ✗ | ✗ |
+| **Đang thi** (bấm bắt đầu *hoặc* tới giờ hẹn) | ✗ chốt danh sách | ✓ | ✗ |
+| **Đã kết thúc** | ✗ | ✗ | ✓ |
+
+- **Hết giờ = giờ bắt đầu + thời lượng đề dài nhất trong phòng.** Bài của thí sinh bị
+  chặn ở mốc này: vào muộn 10 phút thì cũng chỉ còn phần giờ còn lại của cả phòng — tới
+  giờ là thu bài cả phòng, bảng xếp hạng không phải chờ người vào muộn nhất.
+- **Kết thúc sớm**: kéo hạn nộp mọi bài dở về "bây giờ" rồi chốt ngay qua đúng đường
+  chấm của bài hết giờ — bảng xếp hạng có ngay, không chờ job 30 giây.
+- Đang thi / đã kết thúc thì **không gắn / gỡ đề** được (gắn đề dài hơn là kéo dài giờ
+  thi giữa chừng; gỡ đề sau khi kết thúc là xoá luôn bảng xếp hạng của đề đó).
+- Người ra đề: nút chính của thẻ phòng đổi theo pha (*Mở sảnh chờ → Bắt đầu làm bài →
+  Theo dõi bảng xếp hạng*), đồng hồ đếm tới giờ bắt đầu / giờ hết, ô **hẹn giờ bắt đầu**
+  trong form phòng.
+- Thí sinh: dải báo pha đầu trang phòng ("Sảnh chờ — chờ người ra đề bấm bắt đầu"),
+  trang tự làm mới 10 giây một lần để nút làm bài mở ngay khi bắt đầu.
+- **Đề tự do (công khai) không bị luật phòng chặn** — gắn đề công khai vào phòng thì nó
+  vẫn làm được ngoài phòng như cũ. Muốn thi có giờ chung thì dùng đề không công khai.
+- ⚠️ Thay đổi hành vi: các phòng đang OPEN từ trước giờ là **sảnh chờ** — thí sinh không
+  làm bài được cho tới khi người ra đề bấm "Bắt đầu làm bài".
+
+### 12.4 Bảng xếp hạng
+
+Luật xếp hạng dùng chung: điểm cao hơn đứng trên; bằng điểm thì làm nhanh hơn đứng trên;
+bằng cả hai thì cùng hạng (1, 2, 2, 4). Mỗi thí sinh một dòng — lượt tốt nhất.
+
+- **Phòng thi** (`GET /api/rooms/{id}/leaderboard`): mỗi đề một bảng, gồm cả người chưa
+  làm (cuối bảng, không hạng). Người ra đề xem **trực tiếp trong giờ thi** (tự làm mới 15
+  giây); thí sinh chỉ xem **sau khi phòng hết giờ** — thấy bảng giữa giờ thì thành cuộc
+  đua chứ không còn là bài thi. Chỉ tính lượt bắt đầu trong khung giờ của buổi thi.
+- **Đề tự do** (`GET /api/student/exams/{id}/leaderboard`): tốp 20 + dòng của chính mình
+  kể cả khi ở ngoài tốp. Hiện ngay trên màn hình vừa nộp bài ("Bạn đứng hạng 3/42").
+- Thí sinh chỉ thấy `submissionId` (nút "Xem bài") của chính mình.
+- Mục **"Bảng xếp hạng"** của thí sinh trước đây là "Phần này chưa được xây dựng", và khối
+  "Top lớp N4" ở trang chủ là dữ liệu giả tên người bịa — cả hai đã thay bằng dữ liệu thật.
+
+### 12.5 Thuật ngữ
+
+- Bỏ khối **"Thao tác nhanh"** và **"Cần xử lý"** ở trang người ra đề; bỏ **"Cần xử lý"**
+  ở tổng quan Admin (số liệu nào cần hành động thì thẻ số có đường dẫn thẳng tới danh sách).
+- Admin: *Tổng quan ôn luyện* với ba nhóm *Hoạt động luyện đề · Học viên · Học liệu ôn
+  thi*; *Duyệt lộ trình*. Người ra đề: *Đề luyện thi*, *Đang mở luyện*, *Đề chưa có câu hỏi*.
+
+### 12.6 Lỗi có sẵn phát hiện trong lúc làm — đã sửa
+
+| Lỗi | Hậu quả |
+|---|---|
+| `TeacherExamResponse.isPublic` ra JSON là `"public"` (Lombok + Jackson bỏ tiền tố "is") | Form sửa đề mở ra với ô "công khai" bị bỏ tick → **lưu lại là đề công khai thành đề riêng** |
+| `ReviewCardResponse.isNew` ra JSON là `"new"` | Thẻ mới hiện "Đã ôn 0 lần" |
+| Form sửa bài học không gửi `deckId` / `examId` | **Lưu một bài là mất bộ thẻ và bài kiểm tra đã gắn** |
+| `ExamRow` kiểm `source === 'CLASS'` (đã đổi thành `ROOM` từ khi bỏ lớp) | Đề trong phòng bị ghi "Luyện tập tự do" |
+| Class `sd-primary-btn` không tồn tại trong CSS | Nút "Vào phòng" không có kiểu |
+
+### 12.7 Kiểm chứng
+
+Chạy thật trên MySQL: phòng thi 30/30 kiểm (sảnh chờ chặn làm bài, bắt đầu, người mới bị
+chặn, hạn nộp ≤ giờ kết thúc phòng, kết thúc sớm thu bài dở, quyền xem bảng, đồng hạng),
+lộ trình 19/19 kiểm (khoá tuần tự, ngưỡng đạt, đề không công khai bị từ chối). Giao diện
+chụp bằng Edge headless điều khiển qua DevTools Protocol.

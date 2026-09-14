@@ -7,18 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một câu hỏi mà thí sinh đã từng làm sai, kèm lịch ôn lại.
- *
- * Không gắn với bài làm nào cả: sai cùng một câu ở ba đề khác nhau vẫn chỉ là
- * MỘT dòng, với {@code wrongCount = 3}. Đó là điểm khác biệt so với
- * {@link SubmissionDetail} — bảng kia ghi "trong bài làm đó bạn trả lời gì",
- * bảng này trả lời "câu này bạn còn yếu tới mức nào".
- *
- * Lịch ôn ở đây cố ý đơn giản hơn SM-2 dùng cho thẻ ghi nhớ: câu hỏi thi có
- * đề bài dài, ôn lại tốn thời gian hơn nhiều so với lật một thẻ từ vựng, nên
- * chỉ cần giãn theo cấp số nhân thô là đủ. Xem {@link #scheduleAfter}.
- */
+/** Một câu hỏi mà thí sinh đã từng làm sai, kèm lịch ôn lại. */
 @Entity
 @Table(
         name = "MistakeEntries",
@@ -86,29 +75,17 @@ public class MistakeEntry {
         return !isMastered() && (nextReviewAt == null || !now.isBefore(nextReviewAt));
     }
 
-    /**
-     * Ghi nhận một lần làm sai nữa.
-     *
-     * Chuỗi đúng bị reset về 0 và câu được đưa trở lại hàng đợi ngay hôm nay:
-     * vừa sai xong mà hẹn ba ngày nữa mới ôn thì đúng lúc ôn đã quên sạch bối
-     * cảnh. Câu đã từng "thuộc" mà sai lại cũng bị mở khoá trở lại — nhớ được
-     * một lần không có nghĩa là nhớ mãi.
-     */
+    /** Ghi nhận một lần làm sai nữa. */
     public void recordWrong(LocalDateTime now) {
         wrongCount = (wrongCount == null ? 0 : wrongCount) + 1;
         correctStreak = 0;
         masteredAt = null;
         lastWrongAt = now;
-        // Cắt về giây: cột DATETIME làm tròn lên phần giây lẻ, đủ để một câu
-        // vừa làm sai bị coi là "chưa tới hạn" ngay sau khi ghi. Xem DbTime.
+        // Cắt về giây: cột DATETIME làm tròn lên phần giây lẻ.
         nextReviewAt = DbTime.atSecond(now);
     }
 
-    /**
-     * Ghi nhận một lần trả lời đúng khi ôn lại.
-     *
-     * @return true nếu lần đúng này khiến câu được đánh dấu đã sửa xong
-     */
+    /** Ghi nhận một lần trả lời đúng khi ôn lại. */
     public boolean recordCorrect(LocalDateTime now) {
         correctStreak = (correctStreak == null ? 0 : correctStreak) + 1;
         if (correctStreak >= STREAK_TO_MASTER) {

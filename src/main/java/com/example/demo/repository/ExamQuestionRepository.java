@@ -37,4 +37,13 @@ public interface ExamQuestionRepository extends JpaRepository<ExamQuestion, Exam
 
         long getTotal();
     }
+
+
+    /** Đề công khai có câu mang tag này — gợi ý "làm đề nhắm đúng chỗ yếu". Bỏ bài xếp trình độ. */
+    @org.springframework.data.jpa.repository.Query("""
+            select distinct eq.exam from ExamQuestion eq join eq.question q join q.tags t
+            where t.tagId = :tagId and eq.exam.isPublic = true and eq.exam.isPlacement = false
+            """)
+    java.util.List<com.example.demo.domain.model.Exam> findPublicExamsByTag(
+            @org.springframework.data.repository.query.Param("tagId") Integer tagId);
 }

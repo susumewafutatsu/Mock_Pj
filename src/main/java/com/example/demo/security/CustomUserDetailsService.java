@@ -22,16 +22,16 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        // User đăng nhập bằng Google không có password_hash. Không thể throw ở đây vì
-        // JwtAuthenticationFilter cũng dùng service này để validate token của họ.
-        // Thay vào đó trả về password rỗng — BCrypt sẽ không khớp với bất kỳ mật khẩu nào,
-        // nên /api/auth/login (local) vẫn bị từ chối.
+        // User đăng nhập bằng Google không có password_hash.
         String password = user.getPasswordHash() == null ? "" : user.getPasswordHash();
 
-        return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                password,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
-        );
+        // accountLocked: DaoAuthenticationProvider tự từ chối đăng nhập mật khẩu.
+        return org.springframework.security.core.userdetails.User
+                .withUsername(user.getEmail())
+                .password(password)
+                .authorities(Collections.singletonList(
+                        new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))
+                .accountLocked(user.isLocked())
+                .build();
     }
 }

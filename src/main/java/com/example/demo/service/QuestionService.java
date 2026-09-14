@@ -11,13 +11,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
-/**
- * Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề.
- *
- * Mọi phương thức nhận {@code teacherEmail} (lấy từ token) và tự kiểm tra
- * quyền sở hữu ngân hàng câu hỏi: chỉ role TEACHER là chưa đủ, người ra đề A
- * không được chạm vào ngân hàng của người ra đề B.
- */
+/** Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề. */
 public interface QuestionService {
 
     QuestionResponse create(QuestionCreateRequest request, String teacherEmail);
@@ -35,11 +29,6 @@ public interface QuestionService {
     List<QuestionResponse> filterByDifficulty(Integer bankId, int minDifficulty,
                                               int maxDifficulty, String teacherEmail);
 
-    /**
-     * Lọc / tìm kiếm câu hỏi theo tag và các tiêu chí khác.
-     *
-     * @param request  bộ tiêu chí lọc, field nào null/rỗng thì bỏ qua
-     * @param pageable phân trang + sắp xếp (đã được whitelist field sort ở controller)
-     */
+    /** Lọc / tìm kiếm câu hỏi theo tag và các tiêu chí khác. */
     PageResponse<QuestionSummaryResponse> searchQuestions(QuestionSearchRequest request, Pageable pageable);
 }

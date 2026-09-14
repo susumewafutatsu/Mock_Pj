@@ -4,6 +4,7 @@ import com.example.demo.domain.enums.QuestionType;
 import com.example.demo.domain.model.Answer;
 import com.example.demo.domain.model.Question;
 import com.example.demo.domain.model.QuestionBank;
+import com.example.demo.domain.model.ReadingPassage;
 import com.example.demo.dto.request.AnswerPayload;
 import com.example.demo.dto.request.QuestionCreateRequest;
 import com.example.demo.dto.request.QuestionSearchRequest;
@@ -17,6 +18,7 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.AnswerRepository;
 import com.example.demo.repository.QuestionBankRepository;
 import com.example.demo.repository.QuestionRepository;
+import com.example.demo.repository.ReadingPassageRepository;
 import com.example.demo.repository.TagRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.specification.QuestionSpecifications;
@@ -44,6 +46,30 @@ public class QuestionServiceImpl implements QuestionService {
     private final QuestionBankRepository bankRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
+    private final ReadingPassageRepository passageRepository;
+
+    /** Đoạn văn của câu đọc hiểu. */
+    /** Chỉ nhận đường dẫn file do chính server cấp khi tải lên. */
+    private String cleanAudioUrl(String audioUrl) {
+        if (audioUrl == null || audioUrl.isBlank()) {
+            return null;
+        }
+        String url = audioUrl.trim();
+        if (!url.startsWith("/media/audio/") || url.contains("..")) {
+            throw new com.example.demo.exception.BusinessException(
+                    "File nghe phải được tải lên qua hệ thống, không nhận đường dẫn ngoài.");
+        }
+        return url;
+    }
+
+    private ReadingPassage resolvePassage(Integer passageId) {
+        if (passageId == null) {
+            return null;
+        }
+        return passageRepository.findById(passageId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy bài đọc id=" + passageId));
+    }
 
     @Override
     @Transactional
@@ -56,6 +82,10 @@ public class QuestionServiceImpl implements QuestionService {
                 .content(req.getContent())
                 .questionType(req.getQuestionType())
                 .difficultyLevel(req.getDifficultyLevel())
+                .skill(req.getSkill())
+                .audioUrl(cleanAudioUrl(req.getAudioUrl()))
+                .maxAudioPlays(req.getMaxAudioPlays())
+                .passage(resolvePassage(req.getPassageId()))
                 .explanation(req.getExplanation())
                 .isAiGenerated(req.isAiGenerated())
                 .isDeleted(false)
@@ -82,11 +112,14 @@ public class QuestionServiceImpl implements QuestionService {
         Question question = requireQuestion(bankId, questionId);
         validateAnswers(req.getQuestionType(), req.getAnswers());
 
-        // Sửa thoải mái: đề thi đã phát hành đọc snapshot trong ExamQuestions,
-        // không đọc bảng này, nên điểm đã chấm không bị ảnh hưởng.
+        // Sửa thoải mái: đề thi đã phát hành đọc snapshot trong ExamQuestions, không đọc bảng này.
         question.setContent(req.getContent());
         question.setQuestionType(req.getQuestionType());
         question.setDifficultyLevel(req.getDifficultyLevel());
+        question.setSkill(req.getSkill());
+        question.setAudioUrl(cleanAudioUrl(req.getAudioUrl()));
+        question.setMaxAudioPlays(req.getMaxAudioPlays());
+        question.setPassage(resolvePassage(req.getPassageId()));
         question.setExplanation(req.getExplanation());
 
         List<Answer> answers = syncAnswers(question, req.getAnswers());
@@ -94,10 +127,7 @@ public class QuestionServiceImpl implements QuestionService {
         return toResponse(question, answers, usedInExam);
     }
 
-    /**
-     * Đồng bộ danh sách đáp án về đúng như client gửi lên: cập nhật cái có
-     * answerId, thêm cái mới, xoá cái không còn trong danh sách.
-     */
+    /** Đồng bộ danh sách đáp án về đúng như client gửi lên. */
     private List<Answer> syncAnswers(Question question, List<AnswerPayload> payloads) {
         List<Answer> existing = answerRepository.findByQuestion_QuestionId(question.getQuestionId());
         Map<Integer, Answer> byId = new HashMap<>();
@@ -116,8 +146,6 @@ public class QuestionServiceImpl implements QuestionService {
         answerRepository.saveAll(result);
 
         // Còn lại trong byId là đáp án client đã bỏ đi.
-        // An toàn: snapshot của các đề cũ đã giữ bản sao riêng, và
-        // ExamQuestionAnswers.OriginalAnswerID được khai báo ON DELETE SET NULL.
         if (!byId.isEmpty()) {
             answerRepository.deleteAll(byId.values());
         }
@@ -170,11 +198,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    /**
-     * Trả về ngân hàng câu hỏi nếu người gọi đúng là chủ sở hữu.
-     * Ném 404 (không phải 403) khi không phải chủ, để không tiết lộ rằng
-     * bankId đó tồn tại và thuộc về người ra đề khác.
-     */
+    /** Trả về ngân hàng câu hỏi nếu người gọi đúng là chủ sở hữu. */
     private QuestionBank requireOwnedBank(Integer bankId, String teacherEmail) {
         String teacherId = userRepository.findByEmail(teacherEmail)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -224,6 +248,11 @@ public class QuestionServiceImpl implements QuestionService {
                 .content(q.getContent())
                 .questionType(q.getQuestionType())
                 .difficultyLevel(q.getDifficultyLevel())
+                .skill(q.getSkill())
+                .audioUrl(q.getAudioUrl())
+                .maxAudioPlays(q.getMaxAudioPlays())
+                .passageId(q.getPassage() == null ? null : q.getPassage().getPassageId())
+                .passageTitle(q.getPassage() == null ? null : q.getPassage().getTitle())
                 .explanation(q.getExplanation())
                 .aiGenerated(Boolean.TRUE.equals(q.getIsAiGenerated()))
                 .createdAt(q.getCreatedAt())
@@ -247,7 +276,6 @@ public class QuestionServiceImpl implements QuestionService {
         Set<String> tags = request.normalizedTags();
 
         // Tag yêu cầu nhưng không tồn tại trong bảng Tags thì chắc chắn không có câu hỏi nào khớp.
-        // Chặn sớm ở đây để khỏi chạy query nặng lên bảng Questions.
         if (!tags.isEmpty() && !hasMatchableTags(tags, request.resolvedTagMode())) {
             return PageResponse.empty(pageable);
         }
@@ -258,9 +286,7 @@ public class QuestionServiceImpl implements QuestionService {
         return PageResponse.from(page, QuestionSummaryResponse::from);
     }
 
-    /**
-     * ANY: cần ít nhất 1 tag tồn tại. ALL: cần tất cả tag đều tồn tại.
-     */
+    /** ANY: cần ít nhất 1 tag tồn tại. */
     private boolean hasMatchableTags(Set<String> tags, QuestionSearchRequest.TagMode mode) {
         Set<String> existing = Set.copyOf(tagRepository.findExistingTagNames(tags));
         return mode == QuestionSearchRequest.TagMode.ALL

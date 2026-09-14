@@ -60,6 +60,8 @@ public class SecurityConfig {
                         // Luồng Google SSO: /oauth2/authorization/google và callback /login/oauth2/code/google
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // File nghe: thẻ <audio src> không gửi được header Authorization.
+                        .requestMatchers("/media/**").permitAll()
                         .requestMatchers("/error").permitAll()
 
                         // Protected endpoints - cần token
@@ -73,9 +75,7 @@ public class SecurityConfig {
                                 new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
                                 new org.springframework.security.web.util.matcher.AntPathRequestMatcher("/api/**")
                         )
-                        // Mặc định Spring trả body {"error":"Forbidden","message":""} nên client
-                        // chỉ đọc được chữ "Forbidden". Ghi thẳng ApiResponse để người dùng
-                        // hiểu là token đang thuộc tài khoản sai vai trò.
+                        // Mặc định Spring trả body {"error":"Forbidden","message":""} nên client chỉ đọc được chữ "Forbidden".
                         .accessDeniedHandler((request, response, ex) -> {
                             response.setStatus(org.springframework.http.HttpStatus.FORBIDDEN.value());
                             response.setContentType("application/json;charset=UTF-8");
@@ -110,6 +110,8 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Disposition"));
+        // Cho trình duyệt nhớ kết quả preflight một giờ.
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

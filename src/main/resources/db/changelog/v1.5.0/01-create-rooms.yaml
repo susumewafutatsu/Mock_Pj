@@ -1,15 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # PHÒNG THI — thay cho Lớp học (revision_plan.md §2)
-  #
-  # Ba bảng mới ở file này. Việc chuyển dữ liệu từ Classes sang và việc
-  # xoá bảng cũ nằm ở hai file riêng (02 và 03), CỐ Ý tách ra: tạo bảng
-  # là an toàn, chuyển dữ liệu là việc cần kiểm lại, còn xoá bảng thì
-  # không lùi được. Gộp cả ba vào một file là tự tước mất cơ hội dừng
-  # lại giữa chừng.
-  #
-  # UserID là VARCHAR(50) vì khoá chính của Users là UUID dạng chuỗi.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.5.0-01-create-rooms
@@ -31,8 +21,7 @@ databaseChangeLog:
                   type: VARCHAR(100)
                   constraints:
                     nullable: false
-              # Mã tham gia. Sinh ngẫu nhiên chứ không chạy tuần tự theo RoomID —
-              # mã đoán được thì ai cũng mò vào được phòng của người khác.
+              # Mã tham gia. Sinh ngẫu nhiên chứ không chạy tuần tự theo RoomID.
               - column:
                   name: Code
                   type: VARCHAR(20)

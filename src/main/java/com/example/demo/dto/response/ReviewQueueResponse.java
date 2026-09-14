@@ -7,31 +7,42 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/** Hàng đợi ôn thẻ của hôm nay, kèm bối cảnh để người học biết mình đang ở đâu. */
+/** Hàng đợi học thẻ: thẻ ôn đến hạn trước, thẻ mới sau. */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ReviewQueueResponse {
 
-    /** Các thẻ của phiên này, đã cắt theo hạn mức ngày. */
+    /** Bộ đang học riêng; null = mọi bộ. */
+    private Integer deckId;
+    private String deckName;
+
     private List<ReviewCardResponse> cards;
 
-    /** Tổng số thẻ đã tới hạn, có thể lớn hơn số thẻ trả về. */
+    /** Thẻ ôn đến hạn (đã từng học). */
+    private long reviewDue;
+
+    /** Thẻ mới còn được mở hôm nay. */
+    private long newAvailable;
+
+    /** Tổng thẻ mới chưa học. */
+    private long newWaiting;
+
+    /** Thẻ mới đã học hôm nay (mọi bộ). */
+    private long newStudiedToday;
+
+    private int newPerDay;
+
+    /** Cần học hôm nay = reviewDue + newAvailable. */
     private long dueCount;
 
-    /** Trong hàng đợi này có bao nhiêu thẻ chưa từng ôn. */
+    /** Số thẻ mới trong hàng đợi này. */
     private long newCount;
 
-    /** Tổng số thẻ đang học. */
     private long totalCards;
-
-    /** Số thẻ đã vào trí nhớ dài hạn (khoảng cách ôn từ 21 ngày trở lên). */
     private long matureCards;
 
-    /**
-     * Trần số thẻ một phiên. Trả xuống để màn hình nói thẳng "hôm nay tối đa
-     * 100 thẻ" thay vì để người học tự đoán vì sao còn 300 thẻ mà chỉ hiện 100.
-     */
+    /** Trần số thẻ ôn một phiên. */
     private int dailyLimit;
 }

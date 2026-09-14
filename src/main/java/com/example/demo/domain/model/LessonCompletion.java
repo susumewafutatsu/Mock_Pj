@@ -6,13 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một bài học đã được đánh dấu hoàn thành.
- *
- * Chỉ có mốc hoàn thành, KHÔNG có trạng thái "đang đọc dở": tiến độ là số bài
- * xong chia tổng số bài, đúng bằng thế. Thêm trạng thái trung gian sẽ kéo theo
- * câu hỏi "đọc tới đâu thì tính là dở" mà không ai trả lời được cho gọn.
- */
+/** Một bài học đã được đánh dấu hoàn thành. */
 @Entity
 @Table(name = "LessonCompletions")
 @Getter

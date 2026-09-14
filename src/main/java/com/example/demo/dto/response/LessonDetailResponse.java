@@ -39,6 +39,15 @@ public class LessonDetailResponse {
 
     private boolean completed;
 
+    /** Ngưỡng qua chặng (%) khi chặng có bài kiểm tra. */
+    private Integer minScorePercent;
+
+    /** Điểm tốt nhất (%) của người đang xem ở bài kiểm tra; null = chưa làm. */
+    private Double bestScorePercent;
+
+    /** Đã đạt ngưỡng bài kiểm tra chưa (luôn true khi chặng không có bài kiểm tra). */
+    private boolean examPassed;
+
     /** Bài kế tiếp trong khoá, để đọc xong bấm đi tiếp. null nếu là bài cuối. */
     private Integer nextLessonId;
 
