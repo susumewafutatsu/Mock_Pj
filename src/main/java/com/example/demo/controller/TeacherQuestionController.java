@@ -28,8 +28,7 @@ public class TeacherQuestionController {
             @PathVariable Integer bankId,
             @Valid @RequestBody QuestionCreateRequest request,
             @AuthenticationPrincipal UserDetails me) {
-        request.setBankId(bankId);
-        QuestionResponse created = questionService.create(request, me.getUsername());
+        QuestionResponse created = questionService.create(bankId, request, me.getUsername());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Đã thêm câu hỏi", created));
     }

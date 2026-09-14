@@ -119,16 +119,29 @@ src/main/resources/db/changelog/
 ├── v1.2.0/  nhiều lượt làm bài
 ├── v1.4.0/  học tập: sổ tay câu sai, từ vựng, kanji, bộ thẻ
 ├── v1.5.0/  bỏ Lớp → Phòng thi
-└── v1.6.0/  khoá học (ngữ pháp, chữ Hán) + duyệt
+├── v1.6.0/  khoá học (ngữ pháp, chữ Hán) + duyệt
+├── v1.7.0/  khoá tài khoản, lộ trình theo chặng
+├── v1.8.0/  phần thi JLPT, bài đọc, dạng câu
+├── v1.9.0/  nghe, thông báo, đánh dấu, khoá job
+├── v2.0.0/  bộ dữ liệu thật (context realdata)
+├── v2.1.0/  làm lại phòng thi
+└── v2.2.0/  làm lại thẻ ghi nhớ
 ```
 
 ---
 
-## Kế hoạch dự án
+## Tài liệu dự án
 
-[`revision_plan.md`](revision_plan.md) — kế hoạch sửa dự án theo phản hồi của
-người hướng dẫn, kèm phần nào đã làm xong và những bẫy đã vấp phải khi làm.
-Đọc file này trước khi bắt tay vào một mục mới.
+Nằm trong [`docs/`](docs/):
+
+| File | Nội dung |
+|---|---|
+| [`TRINH_BAY.md`](docs/TRINH_BAY.md) | Tóm tắt để trình bày: tính năng, phản hồi đã xử lý, kịch bản demo |
+| [`PHAN_CONG.md`](docs/PHAN_CONG.md) | Phân loại chức năng và phân công cho ba thành viên |
+| [`revision_plan.md`](docs/revision_plan.md) | Kế hoạch sửa theo phản hồi của người hướng dẫn, kèm các bẫy đã gặp |
+| [`audit_2026-09.md`](docs/audit_2026-09.md) | Tự rà soát toàn dự án, kết quả 4 đợt sửa |
+| [`room_review_2026-09.md`](docs/room_review_2026-09.md) | Rà soát và làm lại phòng thi |
+| [`flashcard_review_2026-09.md`](docs/flashcard_review_2026-09.md) | Rà soát và làm lại thẻ ghi nhớ |
 
 ---
 
