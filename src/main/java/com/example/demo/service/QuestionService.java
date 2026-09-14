@@ -14,7 +14,7 @@ import java.util.List;
 /** Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề. */
 public interface QuestionService {
 
-    QuestionResponse create(QuestionCreateRequest request, String teacherEmail);
+    QuestionResponse create(Integer bankId, QuestionCreateRequest request, String teacherEmail);
 
     QuestionResponse update(Integer bankId, Integer questionId,
                             QuestionUpdateRequest request, String teacherEmail);

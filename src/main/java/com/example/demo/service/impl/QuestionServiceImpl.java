@@ -73,8 +73,8 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
-    public QuestionResponse create(QuestionCreateRequest req, String teacherEmail) {
-        QuestionBank bank = requireOwnedBank(req.getBankId(), teacherEmail);
+    public QuestionResponse create(Integer bankId, QuestionCreateRequest req, String teacherEmail) {
+        QuestionBank bank = requireOwnedBank(bankId, teacherEmail);
         validateAnswers(req.getQuestionType(), req.getAnswers());
 
         Question question = Question.builder()

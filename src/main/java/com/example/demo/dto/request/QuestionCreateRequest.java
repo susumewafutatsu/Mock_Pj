@@ -16,9 +16,6 @@ import java.util.List;
 @Data
 public class QuestionCreateRequest {
 
-    @NotNull(message = "Phải chỉ định ngân hàng câu hỏi")
-    private Integer bankId;
-
     @NotBlank(message = "Nội dung câu hỏi không được để trống")
     private String content;
 
