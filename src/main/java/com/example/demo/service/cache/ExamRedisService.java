@@ -18,26 +18,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Toàn bộ chỗ chạm vào Redis của chức năng bài thi nằm ở đây.
- *
- * Gom về một lớp vì hai lý do: tên key chỉ được định nghĩa một chỗ (đổi tiền tố
- * là đổi toàn hệ thống), và quy tắc "Redis lỗi thì đi đường MySQL" chỉ cần viết
- * một lần chứ không rải try/catch khắp service.
- *
- * Quy ước trả về khi Redis không dùng được — quan trọng, vì đây chính là cách
- * hệ thống vẫn thi được lúc Redis chết:
- *   - Cache đọc  -> {@link Optional#empty()}, phía gọi tự dựng lại từ DB.
- *   - Khoá       -> {@link LockState#UNAVAILABLE}, phía gọi quay về khoá dòng DB.
- *   - Presence   -> {@link Optional#empty()}, phía gọi quay lại so LastActiveAt.
- *   - Nhịp sống  -> báo "hãy ghi thẳng xuống DB", đúng như hồi chưa có Redis.
- *
- * Các nhóm key đang dùng:
- *   exam:paper:{examId}                  cache đề thi đã snapshot (TTL ngắn)
- *   exam:lock:start:{examId}:{studentId} khoá lúc tạo phiên (TTL vài giây)
- *   exam:alive:{submissionId}            presence heartbeat (TTL = ngưỡng im lặng)
- *   exam:dbflush:{submissionId}          van tiết lưu ghi LastActiveAt xuống DB
- */
+/** Toàn bộ chỗ chạm vào Redis của chức năng bài thi nằm ở đây. */
 @Service
 @RequiredArgsConstructor
 public class ExamRedisService {
@@ -52,11 +33,7 @@ public class ExamRedisService {
     private final RedisTemplate<String, Object> examRedisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
 
-    /**
-     * Đề thi được cache bao lâu. Ngắn thôi: người ra đề sửa đề là cache bị xoá
-     * ngay (xem {@link #evictPaper}), TTL này chỉ là lưới an toàn cho trường hợp
-     * có ai đó sửa dữ liệu thẳng dưới DB.
-     */
+    /** Đề thi được cache bao lâu. */
     @Value("${exam.redis.paper-ttl-seconds:600}")
     private long paperTtlSeconds;
 
@@ -64,28 +41,13 @@ public class ExamRedisService {
     @Value("${exam.redis.start-lock-seconds:10}")
     private long startLockSeconds;
 
-    /**
-     * Bao lâu mới ghi LastActiveAt xuống MySQL một lần.
-     *
-     * Đây là lý do chính khiến heartbeat cần Redis: 500 thí sinh nhịp 15 giây là
-     * hơn 30 UPDATE mỗi giây bắn thẳng vào bảng ExamSubmissions chỉ để ghi một
-     * cột thời gian. Redis nhận toàn bộ nhịp đó, MySQL chỉ nhận một bản ghi mỗi
-     * chu kỳ này. Phải nhỏ hơn hẳn at-risk-after-seconds, nếu không cột
-     * LastActiveAt lạc hậu tới mức job quét tưởng nhầm là thí sinh đã rớt mạng.
-     */
+    /** Bao lâu mới ghi LastActiveAt xuống MySQL một lần. */
     @Value("${exam.redis.last-active-flush-seconds:30}")
     private long lastActiveFlushSeconds;
 
     // ── Cache đề thi ────────────────────────────────────────────────────────
 
-    /**
-     * Bản đề đã snapshot của một bài thi: nội dung câu hỏi + các lựa chọn, giống
-     * hệt nhau với mọi thí sinh nên cache dùng chung được.
-     *
-     * Phần riêng của từng em (đã chọn đáp án nào) KHÔNG nằm trong đây — nó được
-     * ghép vào sau khi đọc cache. Cache dùng chung mà lẫn dữ liệu cá nhân thì
-     * thí sinh này sẽ nhìn thấy bài của thí sinh khác.
-     */
+    /** Bản đề đã snapshot của một bài thi. */
     public Optional<List<ExamQuestionView>> getPaper(Integer examId) {
         try {
             Object cached = examRedisTemplate.opsForValue().get(paperKey(examId));
@@ -108,11 +70,7 @@ public class ExamRedisService {
         }
     }
 
-    /**
-     * Xoá cache đề thi. Gọi ở MỌI chỗ người ra đề đổi cấu trúc đề — thêm câu, gỡ
-     * câu, làm mới snapshot, sửa hoặc xoá đề. Quên một chỗ là thí sinh vào thi
-     * còn thấy đề cũ cho tới khi TTL hết.
-     */
+    /** Xoá cache đề thi. Gọi ở MỌI chỗ người ra đề đổi cấu trúc đề. */
     public void evictPaper(Integer examId) {
         try {
             examRedisTemplate.delete(paperKey(examId));
@@ -124,23 +82,10 @@ public class ExamRedisService {
 
     // ── Khoá lúc tạo phiên ──────────────────────────────────────────────────
 
-    /**
-     * Kết quả xin khoá.
-     *
-     * UNAVAILABLE được tách riêng khỏi ACQUIRED một cách có chủ đích: nếu Redis
-     * chết mà cứ coi như đã có khoá thì hai request song song cùng chạy tiếp và
-     * cùng INSERT — phía gọi cần biết để quay về khoá DB như trước.
-     */
+    /** Kết quả xin khoá. */
     public enum LockState { ACQUIRED, BUSY, UNAVAILABLE }
 
-    /**
-     * Giành quyền tạo phiên cho đúng một cặp (đề, thí sinh).
-     *
-     * Trước đây chỗ này khoá bằng SELECT ... FOR UPDATE trên dòng đề thi, tức là
-     * toàn bộ thí sinh cùng bấm "Bắt đầu" phải xếp hàng qua một dòng DB duy nhất
-     * — đúng lúc vào phòng thi là lúc đông nhất. Khoá Redis hẹp hơn hẳn: hai
-     * request của CÙNG một em mới đụng nhau, các em khác vào song song.
-     */
+    /** Giành quyền tạo phiên cho đúng một cặp (đề, thí sinh). */
     public LockState acquireStartLock(Integer examId, String studentId) {
         try {
             Boolean acquired = stringRedisTemplate.opsForValue()
@@ -165,22 +110,12 @@ public class ExamRedisService {
 
     // ── Presence: thí sinh còn online hay không ─────────────────────────────
 
-    /**
-     * Ghi nhận thí sinh vừa có hoạt động. Gọi ở heartbeat, lúc lưu đáp án và lúc
-     * vào / vào lại phòng thi.
-     *
-     * Key hết hạn sau {@code silenceSeconds} nên bản thân việc key biến mất đã
-     * là tín hiệu mất kết nối — không cần đi so sánh mốc thời gian.
-     *
-     * @return true nếu đã tới lúc ghi LastActiveAt xuống MySQL. Phía gọi phải
-     *         tôn trọng giá trị này, đó là chỗ tiết kiệm ghi DB.
-     */
+    /** Ghi nhận thí sinh vừa có hoạt động. */
     public boolean touchAlive(Integer submissionId, long silenceSeconds) {
         try {
             stringRedisTemplate.opsForValue().set(aliveKey(submissionId), "1",
                     Duration.ofSeconds(silenceSeconds));
             // Van tiết lưu: chỉ request nào đặt được key mới (SET NX) mới ghi DB.
-            // Các nhịp còn lại trong cùng chu kỳ thấy key đã có nên bỏ qua.
             Boolean firstInWindow = stringRedisTemplate.opsForValue()
                     .setIfAbsent(dbFlushKey(submissionId), "1",
                             Duration.ofSeconds(lastActiveFlushSeconds));
@@ -193,14 +128,7 @@ public class ExamRedisService {
         }
     }
 
-    /**
-     * Tra presence cho cả lô phiên trong một vòng. Job quét chạy mỗi 30 giây và
-     * có thể phải hỏi hàng trăm phiên; hỏi từng cái là hàng trăm lượt đi về
-     * mạng, pipeline gom lại còn một.
-     *
-     * @return tập submissionId còn sống, hoặc {@link Optional#empty()} nếu Redis
-     *         không dùng được (phía gọi phải tự xoay bằng LastActiveAt)
-     */
+    /** Tra presence cho cả lô phiên trong một vòng. */
     public Optional<Set<Integer>> findAlive(List<Integer> submissionIds) {
         if (submissionIds.isEmpty()) {
             return Optional.of(Collections.emptySet());

@@ -17,4 +17,7 @@ public class ExamQuestionSelection {
 
     /** Thứ tự hiển thị trong đề. Null = xếp theo thứ tự gửi lên. */
     private Integer questionOrder;
+
+    /** Phần thi sẽ chứa câu này. */
+    private Integer sectionId;
 }

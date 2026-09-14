@@ -3,15 +3,9 @@ package com.example.demo.dto.response;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 
-/**
- * Một lựa chọn của câu hỏi, đọc từ snapshot của đề thi.
- *
- * KHÔNG có cờ đáp án đúng: DTO này đi ra tới trình duyệt của thí sinh đang
- * làm bài.
- */
+/** Một lựa chọn của câu hỏi, đọc từ snapshot của đề thi. */
 @Data
 @Builder
 @NoArgsConstructor

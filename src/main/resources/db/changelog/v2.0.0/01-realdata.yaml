@@ -1,0 +1,30 @@
+databaseChangeLog:
+  # BỘ DỮ LIỆU THẬT (tài khoản, câu hỏi N5→N2, đề, phòng thi, lộ trình, lịch sử học tập).
+
+  - changeSet:
+      id: v2.0.0-01-realdata
+      author: team
+      context: realdata
+      comment: "Bộ dữ liệu thật cho nền tảng ôn thi JLPT"
+      preConditions:
+        - onFail: MARK_RAN
+        - dbms:
+            type: mysql
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM Users WHERE UserID LIKE 'tt-%'
+      changes:
+        - sqlFile:
+            path: db/changelog/v2.0.0/realdata/realdata.sql
+            relativeToChangelogFile: false
+            encoding: UTF-8
+            splitStatements: true
+            stripComments: false
+            endDelimiter: ;
+      rollback:
+        - sqlFile:
+            path: db/changelog/v2.0.0/realdata/realdata-rollback.sql
+            relativeToChangelogFile: false
+            encoding: UTF-8
+            splitStatements: true
+            endDelimiter: ;

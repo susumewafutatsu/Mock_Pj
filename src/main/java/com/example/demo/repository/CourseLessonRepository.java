@@ -16,14 +16,7 @@ public interface CourseLessonRepository extends JpaRepository<CourseLesson, Inte
 
     long countByCourse_CourseId(Integer courseId);
 
-    /**
-     * Số bài của cả một tập khoá trong một câu truy vấn.
-     *
-     * Màn "khoá của tôi" hiện nhiều khoá cùng lúc và mỗi khoá cần mẫu số để tính
-     * phần trăm; đếm từng khoá một là ngần ấy lượt truy vấn cho một màn hình.
-     *
-     * @return từng dòng là [courseId, số bài]
-     */
+    /** Số bài của cả một tập khoá trong một câu truy vấn. */
     @Query("""
             select l.course.courseId, count(l)
             from CourseLesson l

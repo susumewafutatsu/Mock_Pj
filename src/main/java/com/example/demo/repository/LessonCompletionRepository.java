@@ -22,14 +22,7 @@ public interface LessonCompletionRepository
     List<Integer> findCompletedLessonIds(@Param("userId") String userId,
                                          @Param("courseId") Integer courseId);
 
-    /**
-     * Số bài đã hoàn thành của một người, gom theo khoá, trong một câu truy vấn.
-     *
-     * Đây là tử số của phần trăm tiến độ; mẫu số lấy từ
-     * {@link CourseLessonRepository#countByCourseIds}.
-     *
-     * @return từng dòng là [courseId, số bài đã xong]
-     */
+    /** Số bài đã hoàn thành của một người, gom theo khoá, trong một câu truy vấn. */
     @Query("""
             select c.lesson.course.courseId, count(c)
             from LessonCompletion c

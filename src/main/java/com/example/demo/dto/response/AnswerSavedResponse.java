@@ -5,12 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/**
- * Xác nhận đã lưu một câu trả lời. Nhẹ nhất có thể vì được gọi rất nhiều lần.
- *
- * Có kèm thời gian còn lại để mỗi lần autosave cũng là một lần đồng bộ lại
- * đồng hồ đếm ngược với server.
- */
+/** Xác nhận đã lưu một câu trả lời. */
 @Data
 @Builder
 public class AnswerSavedResponse {

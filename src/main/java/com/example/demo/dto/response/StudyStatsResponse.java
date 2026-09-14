@@ -5,13 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Bảng "học hôm nay" — thứ hiện trên trang chủ của thí sinh.
- *
- * Cố ý không có điểm thi ở đây. Điểm đo năng lực và chỉ thay đổi khi có kỳ
- * thi; mấy con số này đo nỗ lực và thay đổi mỗi ngày, nên chúng mới là thứ
- * đáng đặt lên trang chủ của một người đang ôn.
- */
+/** Bảng "học hôm nay" — thứ hiện trên trang chủ của thí sinh. */
 @Data
 @Builder
 @NoArgsConstructor

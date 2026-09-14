@@ -1,0 +1,30 @@
+databaseChangeLog:
+  # Làm lại phòng thi: lời dặn, cho vào muộn, thông báo phòng hẹn giờ, trạng thái có mặt.
+
+  - changeSet:
+      id: v2.1.0-01-room-settings
+      author: team
+      comment: "Rooms: lời dặn, số phút cho vào muộn, mốc đã gửi thông báo"
+      changes:
+        - addColumn:
+            tableName: Rooms
+            columns:
+              - column: { name: Instructions, type: TEXT }
+              - column:
+                  name: LateJoinMinutes
+                  type: INT
+                  defaultValueNumeric: 15
+                  constraints: { nullable: false }
+              - column: { name: ReminderSentAt, type: DATETIME }
+              - column: { name: StartNotifiedAt, type: DATETIME }
+              - column: { name: EndNotifiedAt, type: DATETIME }
+
+  - changeSet:
+      id: v2.1.0-02-member-presence
+      author: team
+      comment: "RoomMembers.LastSeenAt: lần cuối thí sinh có mặt ở trang phòng"
+      changes:
+        - addColumn:
+            tableName: RoomMembers
+            columns:
+              - column: { name: LastSeenAt, type: DATETIME }

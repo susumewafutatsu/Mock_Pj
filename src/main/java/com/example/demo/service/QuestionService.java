@@ -6,20 +6,12 @@ import com.example.demo.dto.request.QuestionUpdateRequest;
 import com.example.demo.dto.response.PageResponse;
 import com.example.demo.dto.response.QuestionResponse;
 import com.example.demo.dto.response.QuestionSummaryResponse;
-import com.example.demo.dto.request.QuestionUpdateRequest;
-import com.example.demo.dto.response.QuestionResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
-/**
- * Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề.
- *
- * Mọi phương thức nhận {@code teacherEmail} (lấy từ token) và tự kiểm tra
- * quyền sở hữu ngân hàng câu hỏi: chỉ role TEACHER là chưa đủ, người ra đề A
- * không được chạm vào ngân hàng của người ra đề B.
- */
+/** Quản lý câu hỏi trong ngân hàng — nghiệp vụ của người ra đề. */
 public interface QuestionService {
 
     QuestionResponse create(QuestionCreateRequest request, String teacherEmail);
@@ -27,19 +19,6 @@ public interface QuestionService {
     QuestionResponse update(Integer bankId, Integer questionId,
                             QuestionUpdateRequest request, String teacherEmail);
 
-    /**
-     * Sửa câu hỏi. Không chặn dù câu hỏi đã nằm trong đề thi đã phát hành:
-     * các đề đó đọc snapshot của riêng chúng
-     * ({@link com.example.demo.domain.model.ExamQuestion}), nên bài đã nộp và
-     * điểm đã chấm không bị ảnh hưởng.
-     */
-    QuestionResponse update(Integer bankId, Integer questionId,
-                            QuestionUpdateRequest request, String teacherEmail);
-
-    /**
-     * Xoá câu hỏi khỏi ngân hàng. Nếu câu hỏi đã được dùng trong đề thi thì
-     * chỉ xoá mềm để giữ lịch sử và liên kết thống kê.
-     */
     void delete(Integer bankId, Integer questionId, String teacherEmail);
 
     Page<QuestionResponse> listByBank(Integer bankId, String teacherEmail, Pageable pageable);
@@ -50,11 +29,6 @@ public interface QuestionService {
     List<QuestionResponse> filterByDifficulty(Integer bankId, int minDifficulty,
                                               int maxDifficulty, String teacherEmail);
 
-    /**
-     * Lọc / tìm kiếm câu hỏi theo tag và các tiêu chí khác.
-     *
-     * @param request  bộ tiêu chí lọc, field nào null/rỗng thì bỏ qua
-     * @param pageable phân trang + sắp xếp (đã được whitelist field sort ở controller)
-     */
+    /** Lọc / tìm kiếm câu hỏi theo tag và các tiêu chí khác. */
     PageResponse<QuestionSummaryResponse> searchQuestions(QuestionSearchRequest request, Pageable pageable);
 }

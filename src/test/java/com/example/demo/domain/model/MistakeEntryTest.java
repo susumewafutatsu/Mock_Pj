@@ -10,13 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Vòng đời một câu trong sổ tay câu sai.
- *
- * Chốt bằng test vì luật ở đây dễ bị hiểu nhầm thành "đúng một lần là xong":
- * nhớ được một lần không phải là thuộc, và một câu đã thuộc mà sai lại thì
- * phải quay về hàng đợi chứ không được ở yên trong danh sách đã xong.
- */
+/** Vòng đời một câu trong sổ tay câu sai. */
 class MistakeEntryTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 3, 1, 9, 0);

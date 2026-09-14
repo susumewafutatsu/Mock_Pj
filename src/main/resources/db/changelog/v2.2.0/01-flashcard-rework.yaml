@@ -1,0 +1,121 @@
+databaseChangeLog:
+  # Làm lại thẻ ghi nhớ: thẻ tự tạo, ghi danh bộ thẻ, mốc học lần đầu.
+
+  - changeSet:
+      id: v2.2.0-01-custom-cards
+      author: team
+      comment: "Thẻ do người học tự soạn."
+      changes:
+        - createTable:
+            tableName: CustomCards
+            columns:
+              - column:
+                  name: CardID
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: OwnerID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_customcard_owner
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: Front
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Reading
+                  type: VARCHAR(200)
+              - column:
+                  name: Back
+                  type: VARCHAR(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: Example
+                  type: VARCHAR(500)
+              - column:
+                  name: ExampleMeaning
+                  type: VARCHAR(500)
+              - column:
+                  name: Note
+                  type: VARCHAR(500)
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: UpdatedAt
+                  type: DATETIME
+      rollback:
+        - dropTable:
+            tableName: CustomCards
+
+  - changeSet:
+      id: v2.2.0-02-deck-enrollments
+      author: team
+      comment: "Bộ thẻ người học đã thêm vào lịch học."
+      changes:
+        - createTable:
+            tableName: DeckEnrollments
+            columns:
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_deckenroll_user
+                    references: Users(UserID)
+                    deleteCascade: true
+              - column:
+                  name: DeckID
+                  type: INT
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_deckenroll_deck
+                    references: Decks(DeckID)
+                    deleteCascade: true
+              - column:
+                  name: EnrolledAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+        - addPrimaryKey:
+            tableName: DeckEnrollments
+            columnNames: UserID, DeckID
+            constraintName: PK_DeckEnrollments
+        # Bộ đã có ít nhất một nửa số thẻ trong lịch thì coi là đã ghi danh.
+        - sql:
+            sql: >-
+              INSERT INTO DeckEnrollments (UserID, DeckID, EnrolledAt)
+              SELECT cs.UserID, di.DeckID, COALESCE(MIN(cs.CreatedAt), NOW())
+              FROM UserCardStates cs
+              JOIN DeckItems di ON di.ItemType = cs.ItemType AND di.ItemID = cs.ItemID
+              GROUP BY cs.UserID, di.DeckID
+              HAVING COUNT(*) * 2 >= (SELECT COUNT(*) FROM DeckItems d2 WHERE d2.DeckID = di.DeckID)
+      rollback:
+        - dropTable:
+            tableName: DeckEnrollments
+
+  - changeSet:
+      id: v2.2.0-03-card-first-review
+      author: team
+      comment: "Mốc học lần đầu của thẻ."
+      changes:
+        - addColumn:
+            tableName: UserCardStates
+            columns:
+              - column:
+                  name: FirstReviewedAt
+                  type: DATETIME
+        - sql:
+            sql: UPDATE UserCardStates SET FirstReviewedAt = LastReviewedAt WHERE LastReviewedAt IS NOT NULL
+      rollback:
+        - dropColumn:
+            tableName: UserCardStates
+            columnName: FirstReviewedAt

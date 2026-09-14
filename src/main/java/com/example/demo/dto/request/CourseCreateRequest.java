@@ -6,14 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Tạo / sửa khoá học.
- *
- * Không có trường trạng thái: khoá mới luôn ở DRAFT, và việc chuyển trạng thái
- * đi qua các endpoint riêng (submit / approve / reject) chứ không phải bằng cách
- * client gửi lên một chữ. Để client tự đặt status là mở đường cho người ra đề
- * tự xuất bản khoá của mình.
- */
+/** Tạo / sửa khoá học. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

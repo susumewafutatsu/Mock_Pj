@@ -5,12 +5,7 @@ import com.example.demo.dto.response.TeacherExamResponse;
 
 import java.util.List;
 
-/**
- * Tạo và quản lý đề thi phía Người ra đề.
- *
- * Mọi phương thức nhận teacherEmail lấy từ JWT: người ra đề chỉ thao tác được
- * trên đề do chính mình tạo, và chỉ gắn đề vào lớp của chính mình.
- */
+/** Tạo và quản lý đề thi phía Người ra đề. */
 public interface TeacherExamService {
 
     /** Đề thi do người ra đề này tạo, mới nhất trước. */
@@ -19,10 +14,7 @@ public interface TeacherExamService {
     /** Tạo đề mới. Câu hỏi gắn sau qua API riêng. */
     TeacherExamResponse create(String teacherEmail, ExamCreateRequest request);
 
-    /**
-     * Sửa đề. Không cho sửa khi đã có thí sinh bắt đầu làm — đổi thời lượng hay
-     * lớp lúc đó sẽ làm sai phiên thi đang chạy.
-     */
+    /** Sửa đề. Không cho sửa khi đã có thí sinh bắt đầu làm. */
     TeacherExamResponse update(String teacherEmail, Integer examId, ExamCreateRequest request);
 
     /** Xóa đề. Không cho xóa khi đã có thí sinh làm bài. */

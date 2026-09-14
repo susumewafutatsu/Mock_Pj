@@ -1,0 +1,155 @@
+databaseChangeLog:
+  # v1.9.0 — NGHE, CÁ NHÂN HOÁ VÀ VẬN HÀNH
+
+  # A3. Phần NGHE (聴解) 聴解 chiếm 1/3 số điểm JLPT; thiếu hẳn thì "thi thử" chưa gọi là thi thử.
+  - changeSet:
+      id: v1.9.0-01-question-audio
+      author: team
+      comment: "Câu hỏi có file nghe + số lần được nghe; snapshot sang đề; đếm lượt nghe trong bài làm"
+      changes:
+        - addColumn:
+            tableName: Questions
+            columns:
+              - column: { name: AudioUrl, type: VARCHAR(255) }
+              # JLPT cho nghe MỘT lần. Để NULL = dùng mặc định 1; người ra đề nới
+              # ra cho đề luyện tập nếu muốn.
+              - column: { name: MaxAudioPlays, type: INT }
+        - addColumn:
+            tableName: ExamQuestions
+            columns:
+              - column: { name: AudioUrl, type: VARCHAR(255) }
+              - column: { name: MaxAudioPlays, type: INT }
+        - addColumn:
+            tableName: SubmissionDetails
+            columns:
+              # Đếm ở SERVER: đếm ở trình duyệt thì F5 là nghe lại được, và phần
+              # nghe mất đúng tính chất "nghe một lần" của nó.
+              - column:
+                  name: AudioPlays
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+  # B4. Thông báo trong ứng dụng Bảng Notifications có từ v1.0.0 nhưng chưa luồng nào ghi/đọc.
+  - changeSet:
+      id: v1.9.0-02-notification-inapp
+      author: team
+      comment: "Notifications: IsRead, Link, Kind cho thông báo trong ứng dụng"
+      changes:
+        - addColumn:
+            tableName: Notifications
+            columns:
+              - column:
+                  name: IsRead
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column: { name: Link, type: VARCHAR(255) }
+              # Loại thông báo — để job hằng ngày biết hôm nay đã nhắc chưa, khỏi
+              # nhắc "thẻ đến hạn" ba lần một ngày.
+              - column: { name: Kind, type: VARCHAR(40) }
+        - createIndex:
+            indexName: idx_notification_user_read
+            tableName: Notifications
+            columns:
+              - column: { name: UserID }
+              - column: { name: IsRead }
+
+  # ── B5. Đánh dấu câu + ghi chú ───────────────────────────────────
+  - changeSet:
+      id: v1.9.0-03-bookmarks
+      author: team
+      comment: "Bookmarks: học viên đánh dấu một câu hỏi kèm ghi chú riêng"
+      changes:
+        - createTable:
+            tableName: Bookmarks
+            columns:
+              - column:
+                  name: BookmarkID
+                  type: INT
+                  autoIncrement: true
+                  constraints: { primaryKey: true, nullable: false }
+              - column:
+                  name: UserID
+                  type: VARCHAR(50)
+                  constraints: { nullable: false }
+              - column:
+                  name: QuestionID
+                  type: INT
+                  constraints: { nullable: false }
+              # Ghi chú của chính học viên — khác sổ tay câu sai (hệ thống tự ghi)
+              - column: { name: Note, type: TEXT }
+              - column:
+                  name: CreatedAt
+                  type: DATETIME
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column: { name: UpdatedAt, type: DATETIME }
+        - addUniqueConstraint:
+            constraintName: uq_bookmark_user_question
+            tableName: Bookmarks
+            columnNames: UserID, QuestionID
+        - addForeignKeyConstraint:
+            constraintName: fk_bookmark_user
+            baseTableName: Bookmarks
+            baseColumnNames: UserID
+            referencedTableName: Users
+            referencedColumnNames: UserID
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            constraintName: fk_bookmark_question
+            baseTableName: Bookmarks
+            baseColumnNames: QuestionID
+            referencedTableName: Questions
+            referencedColumnNames: QuestionID
+            onDelete: CASCADE
+
+  # ── A8 + C6. Cờ trên đề thi ──────────────────────────────────────
+  - changeSet:
+      id: v1.9.0-04-exam-flags
+      author: team
+      comment: "Exams: bài xếp trình độ, xáo câu, xáo đáp án"
+      changes:
+        - addColumn:
+            tableName: Exams
+            columns:
+              # Bài xếp trình độ: đề trộn câu nhiều cấp, kết quả dùng để gợi ý
+              # học viên nên bắt đầu ôn từ cấp nào.
+              - column:
+                  name: IsPlacement
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints: { nullable: false }
+              # Xáo mặc định TẮT: đề luyện tập nhiều người chữa chung theo số
+              # câu ("câu 7 sai nhiều") thì thứ tự cố định lại tiện hơn.
+              - column:
+                  name: ShuffleQuestions
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints: { nullable: false }
+              - column:
+                  name: ShuffleOptions
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints: { nullable: false }
+
+  # C4. Khoá job nền giữa nhiều máy chủ @Scheduled chạy trên MỌI instance.
+  - changeSet:
+      id: v1.9.0-05-scheduler-locks
+      author: team
+      comment: "SchedulerLocks: mỗi job chỉ một instance chạy tại một thời điểm"
+      changes:
+        - createTable:
+            tableName: SchedulerLocks
+            columns:
+              - column:
+                  name: Name
+                  type: VARCHAR(64)
+                  constraints: { primaryKey: true, nullable: false }
+              - column:
+                  name: LockedUntil
+                  type: DATETIME
+                  constraints: { nullable: false }
+              - column: { name: LockedAt, type: DATETIME }
+              - column: { name: LockedBy, type: VARCHAR(120) }

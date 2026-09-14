@@ -1,24 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # XOÁ MÔ HÌNH LỚP HỌC
-  #
-  # ĐÂY LÀ FILE KHÔNG LÙI ĐƯỢC. Chỉ chạy sau khi đã kiểm dữ liệu ở
-  # v1.5.0/02 chuyển sang đúng. Cách kiểm nhanh trước khi cho chạy:
-  #
-  #   SELECT (SELECT COUNT(*) FROM Classes)       AS lop_cu,
-  #          (SELECT COUNT(*) FROM Rooms)         AS phong_moi,
-  #          (SELECT COUNT(*) FROM ClassStudents) AS hoc_sinh_cu,
-  #          (SELECT COUNT(*) FROM RoomMembers)   AS thanh_vien_moi,
-  #          (SELECT COUNT(*) FROM Exams WHERE ClassID IS NOT NULL) AS de_gan_lop,
-  #          (SELECT COUNT(*) FROM RoomExams)     AS de_gan_phong;
-  #
-  # Hai cặp đầu phải bằng nhau từng cặp, cặp cuối cũng vậy. Lệch là dừng,
-  # đừng chạy tiếp.
-  #
-  # Rollback ở đây chỉ dựng lại KHUNG bảng rỗng, KHÔNG khôi phục dữ liệu.
-  # Muốn quay lại thật thì phải phục hồi từ bản sao lưu — nói thẳng ra ở
-  # đây còn hơn để ai đó tin vào một lệnh rollback không làm được việc.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.5.0-03-drop-exam-class-column

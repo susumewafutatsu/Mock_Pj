@@ -1,10 +1,16 @@
 package com.example.demo.controller;
 
 import com.example.demo.domain.enums.StudyItemType;
+import com.example.demo.dto.request.CustomCardRequest;
+import com.example.demo.dto.request.DeckItemRequest;
+import com.example.demo.dto.request.DeckRequest;
 import com.example.demo.dto.request.MistakeAttemptRequest;
 import com.example.demo.dto.request.ReviewGradeRequest;
 import com.example.demo.dto.response.ApiResponse;
+import com.example.demo.dto.response.DeckCardView;
+import com.example.demo.dto.response.DeckDetailResponse;
 import com.example.demo.dto.response.DeckResponse;
+import com.example.demo.dto.response.StudyContentHit;
 import com.example.demo.dto.response.MistakeAttemptResponse;
 import com.example.demo.dto.response.MistakeBookResponse;
 import com.example.demo.dto.response.ReviewQueueResponse;
@@ -17,9 +23,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -27,31 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Góc học tập của thí sinh — tách khỏi {@link StudentController} vì đây là
- * nghiệp vụ HỌC, không phải nghiệp vụ THI.
- *
- * Không endpoint nào ở đây tạo ra hay đụng tới một phiên làm bài. Người học
- * mở app mỗi ngày, ôn thẻ đến hạn và làm lại câu từng sai; chuyện đó diễn ra
- * hằng ngày và không liên quan gì tới đề thi nào cả.
- *
- * Sổ tay câu sai:
- *   GET  /mistakes                      -> hàng đợi câu chưa sửa được
- *   POST /mistakes/{questionId}/attempt -> làm lại một câu, server chấm
- *
- * Thẻ ghi nhớ (từ vựng + chữ Hán):
- *   GET  /decks                         -> các bộ thẻ, kèm tiến độ của tôi
- *   POST /decks/{deckId}/enroll         -> bắt đầu học một bộ
- *   GET  /reviews/due                   -> hàng đợi ôn của hôm nay
- *   POST /reviews/{itemType}/{itemId}   -> tự đánh giá một thẻ vừa lật
- *
- * Tổng quan:
- *   GET  /study/stats                   -> số liệu cho bảng "học hôm nay"
- *
- * Đặt dưới tiền tố {@code /api/student} là có chủ đích: SecurityConfig đã ràng
- * toàn bộ nhánh đó về ROLE_STUDENT, nên không cần và không nên khai lại quyền
- * ở từng phương thức.
- */
+/** Góc học tập của thí sinh — tách khỏi {@link StudentController} vì đây là nghiệp vụ HỌC. */
 @RestController
 @RequestMapping("/api/student")
 @RequiredArgsConstructor
@@ -63,12 +47,7 @@ public class StudentStudyController {
 
     // ── Sổ tay câu sai ──────────────────────────────────────────────────────
 
-    /**
-     * Những câu đã làm sai và chưa sửa được, câu cấp thiết nhất xếp trước.
-     *
-     * Có trả về các lựa chọn để làm lại ngay tại chỗ, nhưng không kèm đáp án
-     * đúng — muốn biết đúng sai thì phải trả lời qua endpoint bên dưới.
-     */
+    /** Những câu đã làm sai và chưa sửa được, câu cấp thiết nhất xếp trước. */
     @GetMapping("/mistakes")
     public ApiResponse<MistakeBookResponse> mistakes(
             @RequestParam(defaultValue = "0") int page,
@@ -78,12 +57,7 @@ public class StudentStudyController {
                 mistakeBookService.getMistakeBook(me.getUsername(), page, size));
     }
 
-    /**
-     * Làm lại một câu trong sổ tay.
-     *
-     * Đúng hai lần liên tiếp thì câu được đánh dấu đã sửa xong và rời khỏi sổ
-     * tay; sai thì nó quay lại hàng đợi ngay trong hôm nay.
-     */
+    /** Làm lại một câu trong sổ tay. */
     @PostMapping("/mistakes/{questionId}/attempt")
     public ApiResponse<MistakeAttemptResponse> attemptMistake(
             @PathVariable Integer questionId,
@@ -104,37 +78,105 @@ public class StudentStudyController {
         return ApiResponse.success(srsService.listDecks(me.getUsername()));
     }
 
-    /**
-     * Bắt đầu học một bộ thẻ. Gọi lại không sao: thẻ đã học giữ nguyên tiến độ,
-     * chỉ thẻ chưa có mới được thêm vào lịch.
-     */
+    /** Tạo bộ thẻ riêng. */
+    @PostMapping("/decks")
+    public ApiResponse<DeckResponse> createDeck(@Valid @RequestBody DeckRequest request,
+                                                @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã tạo bộ thẻ", srsService.createDeck(me.getUsername(), request));
+    }
+
+    @GetMapping("/decks/{deckId}")
+    public ApiResponse<DeckDetailResponse> deck(@PathVariable Integer deckId,
+                                                @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(srsService.getDeck(deckId, me.getUsername()));
+    }
+
+    @PutMapping("/decks/{deckId}")
+    public ApiResponse<DeckResponse> updateDeck(@PathVariable Integer deckId,
+                                                @Valid @RequestBody DeckRequest request,
+                                                @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã lưu bộ thẻ", srsService.updateDeck(deckId, me.getUsername(), request));
+    }
+
+    @DeleteMapping("/decks/{deckId}")
+    public ApiResponse<Void> deleteDeck(@PathVariable Integer deckId,
+                                        @AuthenticationPrincipal UserDetails me) {
+        srsService.deleteDeck(deckId, me.getUsername());
+        return ApiResponse.success("Đã xoá bộ thẻ", null);
+    }
+
+    /** Thêm thẻ tự soạn. */
+    @PostMapping("/decks/{deckId}/cards")
+    public ApiResponse<DeckCardView> addCard(@PathVariable Integer deckId,
+                                             @Valid @RequestBody CustomCardRequest request,
+                                             @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã thêm thẻ", srsService.addCustomCard(deckId, me.getUsername(), request));
+    }
+
+    @PutMapping("/decks/{deckId}/cards/{cardId}")
+    public ApiResponse<DeckCardView> updateCard(@PathVariable Integer deckId,
+                                                @PathVariable Integer cardId,
+                                                @Valid @RequestBody CustomCardRequest request,
+                                                @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã sửa thẻ",
+                srsService.updateCustomCard(deckId, cardId, me.getUsername(), request));
+    }
+
+    /** Thêm từ vựng / chữ Hán có sẵn vào bộ. */
+    @PostMapping("/decks/{deckId}/items")
+    public ApiResponse<DeckCardView> addItem(@PathVariable Integer deckId,
+                                             @Valid @RequestBody DeckItemRequest request,
+                                             @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success("Đã thêm vào bộ", srsService.addExistingItem(deckId, me.getUsername(), request));
+    }
+
+    @DeleteMapping("/decks/{deckId}/items/{itemType}/{itemId}")
+    public ApiResponse<Void> removeItem(@PathVariable Integer deckId,
+                                        @PathVariable StudyItemType itemType,
+                                        @PathVariable Integer itemId,
+                                        @AuthenticationPrincipal UserDetails me) {
+        srsService.removeCard(deckId, itemType, itemId, me.getUsername());
+        return ApiResponse.success("Đã gỡ thẻ khỏi bộ", null);
+    }
+
+    /** Thêm bộ vào lịch học. Gọi lại để đồng bộ thẻ mới của bộ. */
     @PostMapping("/decks/{deckId}/enroll")
     public ApiResponse<Integer> enrollDeck(@PathVariable Integer deckId,
                                            @AuthenticationPrincipal UserDetails me) {
         int added = srsService.enrollDeck(deckId, me.getUsername());
         return ApiResponse.success(
-                added == 0 ? "Bạn đã học hết thẻ của bộ này rồi"
-                        : "Đã thêm " + added + " thẻ vào lịch học",
+                added == 0 ? "Bộ thẻ đã có trong lịch học" : "Đã thêm " + added + " thẻ vào lịch học",
                 added);
     }
 
-    /**
-     * Hàng đợi ôn của hôm nay.
-     *
-     * @param limit số thẻ tối đa muốn lấy; bỏ trống thì dùng hạn mức của hệ thống
-     */
-    @GetMapping("/reviews/due")
-    public ApiResponse<ReviewQueueResponse> dueCards(
-            @RequestParam(required = false) Integer limit,
-            @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success(srsService.getDueQueue(me.getUsername(), limit));
+    /** Bỏ bộ khỏi lịch học. */
+    @DeleteMapping("/decks/{deckId}/enroll")
+    public ApiResponse<Integer> unenrollDeck(@PathVariable Integer deckId,
+                                             @AuthenticationPrincipal UserDetails me) {
+        int removed = srsService.unenrollDeck(deckId, me.getUsername());
+        return ApiResponse.success("Đã bỏ bộ khỏi lịch học", removed);
     }
 
-    /**
-     * Người học vừa lật thẻ và tự đánh giá mình nhớ tới đâu.
-     *
-     * Trả về lịch mới của thẻ, để màn hình nói được "gặp lại sau 6 ngày".
-     */
+    /** Tìm từ vựng / chữ Hán có sẵn. */
+    @GetMapping("/study/search")
+    public ApiResponse<List<StudyContentHit>> searchContent(
+            @RequestParam(defaultValue = "") String q,
+            @RequestParam(required = false) StudyItemType type,
+            @RequestParam(required = false) Integer deckId,
+            @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(srsService.searchContent(me.getUsername(), q, type, deckId));
+    }
+
+    /** Hàng đợi hôm nay; deckId để học riêng một bộ, extraNew để học thêm thẻ mới. */
+    @GetMapping("/reviews/due")
+    public ApiResponse<ReviewQueueResponse> dueCards(
+            @RequestParam(required = false) Integer deckId,
+            @RequestParam(required = false) Integer extraNew,
+            @AuthenticationPrincipal UserDetails me) {
+        return ApiResponse.success(srsService.getDueQueue(me.getUsername(), deckId, extraNew));
+    }
+
+    /** Người học vừa lật thẻ và tự đánh giá mình nhớ tới đâu. */
     @PostMapping("/reviews/{itemType}/{itemId}")
     public ApiResponse<ReviewResultResponse> review(
             @PathVariable StudyItemType itemType,

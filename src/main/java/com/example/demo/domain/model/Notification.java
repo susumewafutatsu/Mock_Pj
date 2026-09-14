@@ -45,4 +45,19 @@ public class Notification {
 
     @Column(name = "SentAt")
     private LocalDateTime sentAt;
+
+    @Column(name = "IsRead", nullable = false)
+    @Builder.Default
+    private Boolean isRead = false;
+
+    /** Đường dẫn trong app để bấm vào thông báo là tới đúng chỗ cần làm. */
+    @Column(name = "Link", length = 255)
+    private String link;
+
+    /** Loại thông báo (xem NotificationService.Kind) — để không nhắc trùng trong ngày. */
+    @Column(name = "Kind", length = 40)
+    private String kind;
+
+    @Column(name = "CreatedAt", insertable = false, updatable = false)
+    private LocalDateTime createdAt;
 }

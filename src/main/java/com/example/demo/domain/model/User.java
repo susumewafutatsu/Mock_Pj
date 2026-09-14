@@ -56,4 +56,15 @@ public class User {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)  // ← ĐỔI THÀNH created_at
     private LocalDateTime createdAt;
+
+    /** Tài khoản bị quản trị viên khoá: không đăng nhập được, token đang có cũng mất hiệu lực ở request kế tiếp. */
+    @Column(name = "is_locked", nullable = false)
+    @Builder.Default
+    private boolean locked = false;
+
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
+    @Column(name = "lock_reason", length = 255)
+    private String lockReason;
 }

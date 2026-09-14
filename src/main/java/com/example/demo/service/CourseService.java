@@ -9,26 +9,7 @@ import com.example.demo.dto.response.LessonDetailResponse;
 
 import java.util.List;
 
-/**
- * Khoá học — nơi chứa NGỮ PHÁP và CHỮ HÁN, hai loại nội dung mà bộ thẻ ở
- * {@link SrsService} không diễn tả nổi.
- *
- * Một khoá là danh sách bài học có thứ tự; một bài là một khối lý thuyết để
- * đọc. Đọc xong bấm hoàn thành, tiến độ là số bài xong chia tổng số bài. Cố ý
- * dừng ở mức đó — không có khối nội dung ghép, không đo thời gian đọc, không có
- * trạng thái "đang đọc dở".
- *
- * Ba vai, ba nhóm phương thức:
- *
- *   - Người ra đề soạn nội dung và gửi duyệt.
- *   - Admin duyệt hoặc từ chối kèm lý do.
- *   - Thí sinh chỉ thấy khoá đã xuất bản, ghi danh và học.
- *
- * Vì sao tách vai soạn khỏi vai duyệt: thứ tự dạy ngữ pháp là kiến thức của
- * người dạy, nhưng lộ trình lại là thứ hàng nghìn người đi theo từ đầu tới cuối
- * — một bài xếp sai chỗ không hỏng một buổi học, nó hỏng cả quá trình của người
- * đi theo nó, mà thí sinh mới thì không có cách nào tự phát hiện.
- */
+/** Khoá học — nơi chứa NGỮ PHÁP và CHỮ HÁN, hai loại nội dung mà bộ thẻ ở {@link SrsService} không diễn tả nổi. */
 public interface CourseService {
 
     // ── Người ra đề ────────────────────────────────────────────────────────
@@ -81,13 +62,6 @@ public interface CourseService {
     /** Nội dung một bài để đọc. */
     LessonDetailResponse getLesson(String userEmail, Integer courseId, Integer lessonId);
 
-    /**
-     * Đánh dấu đã đọc xong một bài.
-     *
-     * Idempotent, và cố ý không kiểm tra người học có thật sự đọc hết hay không:
-     * đây là công cụ tự theo dõi tiến độ, không phải bài kiểm tra.
-     *
-     * @return khoá kèm phần trăm mới, để màn hình cập nhật ngay
-     */
+    /** Đánh dấu đã đọc xong một bài. */
     CourseResponse completeLesson(String userEmail, Integer courseId, Integer lessonId);
 }

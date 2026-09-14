@@ -4,14 +4,7 @@ import com.example.demo.domain.enums.StudyItemType;
 import jakarta.persistence.*;
 import lombok.*;
 
-/**
- * Một thẻ nằm trong một bộ.
- *
- * {@code id.itemId} là tham chiếu đa hình: trỏ tới {@code VocabItems} hay
- * {@code KanjiItems} là tuỳ {@code id.itemType}. Không có khoá ngoại — đó là
- * cái giá để một bộ chứa được cả hai loại thẻ. Việc kiểm tra thẻ có thật hay
- * không do tầng service làm lúc thêm thẻ vào bộ.
- */
+/** Một thẻ nằm trong một bộ. */
 @Entity
 @Table(name = "DeckItems")
 @Getter

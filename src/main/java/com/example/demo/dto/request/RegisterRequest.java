@@ -8,6 +8,8 @@ import lombok.Data;
 
 @Data
 public class RegisterRequest {
+
+    // KHÔNG có trường role: mọi tài khoản đăng ký đều là học viên.
     @NotBlank(message = "Họ tên không được để trống")
     private String fullName;
     
@@ -19,5 +21,4 @@ public class RegisterRequest {
     @Size(min = 6, message = "Mật khẩu phải có ít nhất 6 ký tự")
     private String password;
     
-    private String role = "STUDENT"; // Mặc định
 }

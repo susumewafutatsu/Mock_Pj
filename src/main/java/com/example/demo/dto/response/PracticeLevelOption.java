@@ -3,13 +3,7 @@ package com.example.demo.dto.response;
 import lombok.Builder;
 import lombok.Data;
 
-/**
- * Một lựa chọn trong bộ lọc của trang đề luyện tập.
- *
- * Danh sách này được dựng từ các trình độ THỰC SỰ có đề luyện tập, không phải
- * từ toàn bộ danh mục trình độ — để thí sinh không bấm phải một lựa chọn rồi
- * nhận về danh sách rỗng.
- */
+/** Một lựa chọn trong bộ lọc của trang đề luyện tập. */
 @Data
 @Builder
 public class PracticeLevelOption {
@@ -22,9 +16,6 @@ public class PracticeLevelOption {
     /** Số đề luyện tập thuộc trình độ này. */
     private long examCount;
 
-    /**
-     * Thí sinh đang học trình độ này (có phòng thuộc trình độ đó) hay không.
-     * Client dùng để đánh dấu "trình độ của bạn" và chọn sẵn khi mở trang.
-     */
+    /** Thí sinh đang học trình độ này (có phòng thuộc trình độ đó) hay không. */
     private boolean enrolled;
 }

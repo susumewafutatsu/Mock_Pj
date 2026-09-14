@@ -15,7 +15,6 @@ import java.util.Optional;
 @Repository
 public interface QuestionRepository
         extends JpaRepository<Question, Integer>, JpaSpecificationExecutor<Question> {
-public interface QuestionRepository extends JpaRepository<Question, Integer> {
 
     Optional<Question> findByQuestionIdAndBank_BankIdAndIsDeletedFalse(Integer questionId, Integer bankId);
 
@@ -26,6 +25,9 @@ public interface QuestionRepository extends JpaRepository<Question, Integer> {
 
     /** Số câu hỏi còn hiệu lực trong một ngân hàng (bỏ qua câu đã xoá mềm). */
     long countByBank_BankIdAndIsDeletedFalse(Integer bankId);
+
+    /** Số câu đang dùng một bài đọc — chặn xoá đoạn văn còn câu gắn vào. */
+    long countByPassage_PassageIdAndIsDeletedFalse(Integer passageId);
 
     /** Câu hỏi đã được đưa vào ít nhất một đề thi. */
     @Query("""

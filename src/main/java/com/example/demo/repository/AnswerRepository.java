@@ -16,11 +16,6 @@ public interface AnswerRepository extends JpaRepository<Answer, Integer> {
 
     void deleteByQuestion_QuestionId(Integer questionId);
 
-    /**
-     * Nạp đáp án cho cả một loạt câu hỏi bằng một truy vấn.
-     *
-     * Dùng ở sổ tay câu sai: một trang 20 câu mà tra đáp án từng câu là 20
-     * lượt truy vấn chỉ để dựng một màn hình.
-     */
+    /** Nạp đáp án cho cả một loạt câu hỏi bằng một truy vấn. */
     List<Answer> findByQuestion_QuestionIdIn(Collection<Integer> questionIds);
 }

@@ -61,7 +61,7 @@ Dữ liệu mẫu được nạp sẵn (context `demo` bật mặc định). M�
 | Vai | Email | Dùng để thử |
 |---|---|---|
 | Người ra đề | `teacher@demo.local` | Soạn đề, mở phòng thi, soạn khoá học |
-| Quản trị viên | `admin@demo.local` | Duyệt khoá học |
+| Quản trị viên | `admin@demo.local` | Tổng quan, quản lý người dùng, duyệt khoá học |
 | Thí sinh | `student1@demo.local` | Làm bài, học khoá, ôn thẻ |
 | Thí sinh | `student2@demo.local`, `student3@demo.local` | Thử phòng thi nhiều người |
 

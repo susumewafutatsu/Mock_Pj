@@ -1,5 +1,8 @@
 package com.example.demo.config;
 
+import com.example.demo.repository.UserCardStateRepository;
+import com.example.demo.repository.UserRepository;
+import com.example.demo.service.NotificationService;
 import com.example.demo.service.SubmissionService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -9,18 +12,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
-/**
- * Hai job nền của phiên thi.
- *
- * Vì sao cần job dù mọi request đã tự kiểm tra hết giờ: thí sinh đóng laptop
- * hoặc mất mạng luôn cho tới hết giờ thì không còn request nào để kích hoạt
- * việc nộp bài. Không có job này, phiên đó nằm mãi ở IN_PROGRESS và người ra đề
- * không bao giờ thấy điểm.
- *
- * Job chỉ là lưới an toàn, không phải đường chính: bài vẫn được nộp ngay ở
- * request đầu tiên sau khi hết giờ, nên độ trễ của job không ảnh hưởng tới học
- * sinh còn online.
- */
+import java.time.Duration;
+import java.time.LocalDateTime;
+
+/** Các job nền. */
 @Configuration
 @EnableScheduling
 @RequiredArgsConstructor
@@ -28,12 +23,17 @@ public class ExamSessionScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ExamSessionScheduler.class);
 
-    private final SubmissionService submissionService;
+    /** Khoá ngắn hơn chu kỳ 30 giây một chút: node chết thì lượt sau node khác vẫn chạy được. */
+    private static final Duration SESSION_JOB_TTL = Duration.ofSeconds(25);
 
-    /**
-     * Ngưỡng im lặng để coi là mất kết nối. Nên đặt gấp 2-3 lần chu kỳ heartbeat
-     * của client (15-30 giây) để một nhịp bị trượt không lập tức báo động.
-     */
+    private final SubmissionService submissionService;
+    private final SchedulerLock schedulerLock;
+    private final NotificationService notificationService;
+    private final com.example.demo.service.SrsService srsService;
+    private final UserRepository userRepository;
+    private final com.example.demo.service.RoomService roomService;
+
+    /** Ngưỡng im lặng để coi là mất kết nối. */
     @Value("${exam.session.at-risk-after-seconds:90}")
     private long atRiskAfterSeconds;
 
@@ -41,7 +41,8 @@ public class ExamSessionScheduler {
     @Scheduled(fixedDelayString = "${exam.session.auto-submit-interval-ms:30000}")
     public void autoSubmitExpired() {
         try {
-            submissionService.autoSubmitExpiredSessions();
+            schedulerLock.runExclusively("exam-auto-submit", SESSION_JOB_TTL,
+                    submissionService::autoSubmitExpiredSessions);
         } catch (Exception e) {
             // Không để job chết: lần quét sau vẫn phải chạy.
             log.error("Job tự động nộp bài quá giờ lỗi", e);
@@ -52,9 +53,55 @@ public class ExamSessionScheduler {
     @Scheduled(fixedDelayString = "${exam.session.at-risk-scan-interval-ms:30000}")
     public void flagDisconnected() {
         try {
-            submissionService.flagDisconnectedSessions(atRiskAfterSeconds);
+            schedulerLock.runExclusively("exam-at-risk-scan", SESSION_JOB_TTL,
+                    () -> submissionService.flagDisconnectedSessions(atRiskAfterSeconds));
         } catch (Exception e) {
             log.error("Job phát hiện thí sinh mất kết nối lỗi", e);
+        }
+    }
+
+    /** Thông báo nhắc / bắt đầu / kết thúc cho phòng thi hẹn giờ. */
+    @Scheduled(fixedDelayString = "${room.notice.interval-ms:30000}")
+    public void notifyScheduledRooms() {
+        try {
+            schedulerLock.runExclusively("room-scheduled-notice", SESSION_JOB_TTL, () -> {
+                int sent = roomService.notifyScheduledRooms();
+                if (sent > 0) {
+                    log.info("Thông báo phòng thi hẹn giờ: gửi {} lượt", sent);
+                }
+            });
+        } catch (Exception e) {
+            log.error("Job thông báo phòng thi hẹn giờ lỗi", e);
+        }
+    }
+
+    /** Nhắc ôn thẻ đến hạn, mỗi ngày một lần. */
+    @Scheduled(cron = "${study.reminder.cron:0 0 8 * * *}")
+    public void remindDueCards() {
+        try {
+            schedulerLock.runExclusively("study-due-reminder", Duration.ofMinutes(10), () -> {
+                int sent = 0;
+                for (var row : srsService.cardsAvailableTodayByUser().entrySet()) {
+                    String userId = row.getKey();
+                    long due = row.getValue();
+                    if (due <= 0 || notificationService.sentToday(userId, NotificationService.Kind.CARDS_DUE)) {
+                        continue;
+                    }
+                    var user = userRepository.findById(userId).orElse(null);
+                    if (user == null || user.isLocked()) {
+                        continue;
+                    }
+                    notificationService.notify(user, NotificationService.Kind.CARDS_DUE,
+                            "Có " + due + " thẻ đến hạn ôn hôm nay",
+                            "Ôn đúng hạn thì nhớ lâu hơn nhiều so với ôn dồn. Dành vài phút cho "
+                                    + due + " thẻ đang chờ bạn.",
+                            "/student/exams?tab=flashcards");
+                    sent++;
+                }
+                log.info("Nhắc ôn thẻ đến hạn: gửi {} thông báo", sent);
+            });
+        } catch (Exception e) {
+            log.error("Job nhắc ôn thẻ đến hạn lỗi", e);
         }
     }
 }

@@ -31,15 +31,7 @@ public interface RoomRepository extends JpaRepository<Room, Integer> {
             """)
     List<Room> findByOwner(@Param("ownerId") String ownerId);
 
-    /**
-     * Nạp một tập phòng kèm chủ phòng / trình độ / môn học trong một câu.
-     *
-     * Màn hình "phòng của tôi" bên thí sinh cần mấy tên đó cho từng phòng; để
-     * lazy thì mỗi phòng lại thêm ba truy vấn.
-     *
-     * Người gọi phải tự chặn danh sách rỗng: {@code in ()} không hợp lệ trên
-     * một số DB.
-     */
+    /** Nạp một tập phòng kèm chủ phòng / trình độ / môn học trong một câu. */
     @Query("""
             select r from Room r
             left join fetch r.owner
@@ -60,18 +52,19 @@ public interface RoomRepository extends JpaRepository<Room, Integer> {
             """)
     List<Room> findOpenRooms(@Param("status") RoomStatus status);
 
-    /**
-     * Khoá dòng phòng để tuần tự hoá việc cấp ghế.
-     *
-     * Đây là chốt chặn chính của "ai nhanh thì vào". Không có khoá này thì hai
-     * request Tham gia gần như cùng lúc đều đọc được cùng một sĩ số cũ, cùng
-     * kết luận "còn chỗ" và cùng chen vào — phòng 50 chỗ nhận 52 người.
-     *
-     * Khoá đặt trên PHÒNG chứ không trên bảng thành viên, nên hai phòng khác
-     * nhau vẫn nhận người song song; chỉ những ai tranh nhau cùng một phòng
-     * mới phải xếp hàng, và đó đúng là thứ cần xếp hàng.
-     */
+    /** Khoá dòng phòng để tuần tự hoá việc cấp ghế. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from Room r where r.roomId = :roomId")
     Optional<Room> findByIdForUpdate(@Param("roomId") Integer roomId);
+
+    long countByOwner_UserId(String ownerId);
+
+    /** Phòng hẹn giờ còn thiếu thông báo nhắc / bắt đầu / kết thúc. */
+    @Query("""
+            select r from Room r
+            where r.status in :statuses
+              and r.startTime is not null
+              and r.endNotifiedAt is null
+            """)
+    List<Room> findScheduledNeedingNotice(@Param("statuses") Collection<RoomStatus> statuses);
 }

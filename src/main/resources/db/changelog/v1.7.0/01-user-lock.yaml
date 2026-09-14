@@ -1,0 +1,23 @@
+databaseChangeLog:
+  # KHOÁ TÀI KHOẢN — trang quản trị
+
+  - changeSet:
+      id: v1.7.0-01-users-lock-columns
+      author: team
+      comment: "Users: khoá tài khoản thay cho xoá (is_locked, locked_at, lock_reason)"
+      changes:
+        - addColumn:
+            tableName: Users
+            columns:
+              - column:
+                  name: is_locked
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: locked_at
+                  type: DATETIME
+              - column:
+                  name: lock_reason
+                  type: VARCHAR(255)

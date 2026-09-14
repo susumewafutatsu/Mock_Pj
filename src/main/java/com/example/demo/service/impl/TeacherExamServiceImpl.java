@@ -71,6 +71,9 @@ public class TeacherExamServiceImpl implements TeacherExamService {
                 // Không dùng Boolean.TRUE.equals: bỏ trống trường này phải giữ
                 // mặc định "cho xem", chứ không thành "cấm xem".
                 .allowReview(request.getAllowReview() == null || request.getAllowReview())
+                .isPlacement(Boolean.TRUE.equals(request.getIsPlacement()))
+                .shuffleQuestions(Boolean.TRUE.equals(request.getShuffleQuestions()))
+                .shuffleOptions(Boolean.TRUE.equals(request.getShuffleOptions()))
                 .build();
 
         return toResponse(examRepository.save(exam), LocalDateTime.now());
@@ -96,9 +99,11 @@ public class TeacherExamServiceImpl implements TeacherExamService {
         exam.setIsAdaptive(Boolean.TRUE.equals(request.getAdaptive()));
         exam.setMaxAttempts(request.getMaxAttempts());
         exam.setAllowReview(request.getAllowReview() == null || request.getAllowReview());
+        exam.setIsPlacement(Boolean.TRUE.equals(request.getIsPlacement()));
+        exam.setShuffleQuestions(Boolean.TRUE.equals(request.getShuffleQuestions()));
+        exam.setShuffleOptions(Boolean.TRUE.equals(request.getShuffleOptions()));
 
-        // Sửa đề là bản cache trong Redis hết đúng. Xoá sau commit để không có
-        // request nào kịp nạp lại cache từ dữ liệu cũ chưa commit.
+        // Sửa đề là bản cache trong Redis hết đúng.
         evictPaperCacheAfterCommit(examId);
         return toResponse(examRepository.save(exam), LocalDateTime.now());
     }
@@ -121,11 +126,7 @@ public class TeacherExamServiceImpl implements TeacherExamService {
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    /**
-     * Xoá bản cache đề thi trong Redis, nhưng chỉ sau khi transaction commit —
-     * xoá sớm thì một request đọc song song có thể nạp lại cache bằng dữ liệu cũ
-     * và không còn ai đi xoá lần nữa.
-     */
+    /** Xoá bản cache đề thi trong Redis, nhưng chỉ sau khi transaction commit. */
     private void evictPaperCacheAfterCommit(Integer examId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             examRedis.evictPaper(examId);
@@ -159,8 +160,11 @@ public class TeacherExamServiceImpl implements TeacherExamService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy trình độ id=" + levelId));
     }
 
+    /** Khung giờ mở đề giờ để trống được (xem {@link ExamCreateRequest#getStartTime()}) */
     private void requireValidWindow(ExamCreateRequest request) {
-        if (!request.getEndTime().isAfter(request.getStartTime())) {
+        LocalDateTime start = request.getStartTime();
+        LocalDateTime end = request.getEndTime();
+        if (start != null && end != null && !end.isAfter(start)) {
             throw new BusinessException("Thời gian đóng đề phải sau thời gian mở đề");
         }
     }
@@ -182,6 +186,10 @@ public class TeacherExamServiceImpl implements TeacherExamService {
                 .maxAttempts(exam.getMaxAttempts())
                 .allowReview(Boolean.TRUE.equals(exam.getAllowReview()))
                 .isPublic(Boolean.TRUE.equals(exam.getIsPublic()))
+                .isPlacement(Boolean.TRUE.equals(exam.getIsPlacement()))
+                .shuffleQuestions(Boolean.TRUE.equals(exam.getShuffleQuestions()))
+                .shuffleOptions(Boolean.TRUE.equals(exam.getShuffleOptions()))
+                .jlptScoring(Boolean.TRUE.equals(exam.getJlptScoring()))
                 .roomCount(roomIds.size())
                 .levelId(level != null ? level.getLevelId() : null)
                 .levelName(level != null ? level.getLevelName() : null)
@@ -189,8 +197,7 @@ public class TeacherExamServiceImpl implements TeacherExamService {
                         ? level.getSubject().getSubjectName() : null)
                 .totalQuestions(totalQuestions)
                 .submissionCount(submissionRepository.countByExamExamId(exam.getExamId()))
-                // Cộng sĩ số của mọi phòng có chứa đề này. Đề công khai thì con
-                // số này là 0 và đúng là 0: nó không hướng tới một nhóm nào cả.
+                // Cộng sĩ số của mọi phòng có chứa đề này.
                 .totalCandidates(roomIds.isEmpty() ? 0L
                         : roomMemberRepository.countActiveByRoomIdIn(roomIds).stream()
                                 .mapToLong(RoomMemberRepository.RoomHeadcount::getTotal).sum())

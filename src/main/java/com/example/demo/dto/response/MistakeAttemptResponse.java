@@ -7,12 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Kết quả một lần làm lại câu sai.
- *
- * Đây là chỗ duy nhất lộ đáp án đúng và lời giải — sau khi người học đã trả
- * lời xong. Trước đó thì không endpoint nào trả hai thứ này.
- */
+/** Kết quả một lần làm lại câu sai. */
 @Data
 @Builder
 @NoArgsConstructor

@@ -24,42 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Khoá học — nơi chứa ngữ pháp và chữ Hán.
- *
- * Đặt ở {@code /api/courses} chứ không dưới {@code /api/teacher} hay
- * {@code /api/student}, cùng lý do với {@link RoomController}: đây là tài
- * nguyên mà ba vai cùng chạm vào, chỉ khác góc nhìn. Tách theo vai sẽ sinh ra
- * ba bộ endpoint gần giống hệt nhau cho cùng một thứ.
- *
- * Nhánh này chỉ đòi "đã đăng nhập"; việc phân quyền nằm ở tầng service —
- * soạn khoá đòi vai người ra đề, duyệt đòi vai Admin, và mọi thao tác trên một
- * khoá cụ thể đều kiểm quyền sở hữu. Người không được xem nhận 404 chứ không
- * phải 403, để không lộ ra khoá đó có tồn tại.
- *
- * Người ra đề:
- *   GET    /courses/mine                          -> khoá tôi soạn, mọi trạng thái
- *   POST   /courses                               -> tạo khoá (luôn bắt đầu ở DRAFT)
- *   PUT    /courses/{id}                          -> sửa thông tin khoá
- *   DELETE /courses/{id}                          -> xoá (chỉ khi chưa ai ghi danh)
- *   POST   /courses/{id}/submit                   -> gửi duyệt
- *   POST   /courses/{id}/lessons                  -> thêm bài
- *   PUT    /courses/{id}/lessons/{lessonId}       -> sửa bài
- *   DELETE /courses/{id}/lessons/{lessonId}       -> xoá bài
- *
- * Admin:
- *   GET    /courses/pending                       -> hàng đợi duyệt
- *   POST   /courses/{id}/approve                  -> duyệt và xuất bản
- *   POST   /courses/{id}/reject                   -> từ chối, bắt buộc kèm lý do
- *
- * Thí sinh:
- *   GET    /courses?levelId=                      -> khoá đã xuất bản
- *   GET    /courses/enrolled                      -> khoá tôi đang theo, kèm phần trăm
- *   GET    /courses/{id}                          -> chi tiết + danh sách bài
- *   POST   /courses/{id}/enroll                   -> ghi danh
- *   GET    /courses/{id}/lessons/{lessonId}       -> đọc lý thuyết
- *   POST   /courses/{id}/lessons/{lessonId}/complete -> đánh dấu đã học xong
- */
+/** Lộ trình ôn tập — chuỗi chặng hướng tới một trình độ thi (tên trong code vẫn là "course" để không phải đổi đường dẫn API và bảng dữ liệu). */
 @RestController
 @RequestMapping("/api/courses")
 @RequiredArgsConstructor
@@ -77,7 +42,7 @@ public class CourseController {
     @PostMapping
     public ApiResponse<CourseResponse> create(@Valid @RequestBody CourseCreateRequest request,
                                               @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã tạo khoá học ở dạng nháp",
+        return ApiResponse.success("Đã tạo lộ trình ở dạng nháp",
                 courseService.createCourse(me.getUsername(), request));
     }
 
@@ -85,7 +50,7 @@ public class CourseController {
     public ApiResponse<CourseResponse> update(@PathVariable Integer courseId,
                                               @Valid @RequestBody CourseCreateRequest request,
                                               @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã cập nhật khoá học",
+        return ApiResponse.success("Đã cập nhật lộ trình",
                 courseService.updateCourse(me.getUsername(), courseId, request));
     }
 
@@ -93,7 +58,7 @@ public class CourseController {
     public ApiResponse<Void> delete(@PathVariable Integer courseId,
                                     @AuthenticationPrincipal UserDetails me) {
         courseService.deleteCourse(me.getUsername(), courseId);
-        return ApiResponse.success("Đã xoá khoá học", null);
+        return ApiResponse.success("Đã xoá lộ trình", null);
     }
 
     /** Gửi duyệt. Khoá chưa có bài nào thì không gửi được. */
@@ -109,7 +74,7 @@ public class CourseController {
             @PathVariable Integer courseId,
             @Valid @RequestBody LessonCreateRequest request,
             @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã thêm bài học",
+        return ApiResponse.success("Đã thêm chặng",
                 courseService.addLesson(me.getUsername(), courseId, request));
     }
 
@@ -119,7 +84,7 @@ public class CourseController {
             @PathVariable Integer lessonId,
             @Valid @RequestBody LessonCreateRequest request,
             @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã cập nhật bài học",
+        return ApiResponse.success("Đã cập nhật chặng",
                 courseService.updateLesson(me.getUsername(), courseId, lessonId, request));
     }
 
@@ -128,7 +93,7 @@ public class CourseController {
             @PathVariable Integer courseId,
             @PathVariable Integer lessonId,
             @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã xoá bài học",
+        return ApiResponse.success("Đã xoá chặng",
                 courseService.deleteLesson(me.getUsername(), courseId, lessonId));
     }
 
@@ -143,7 +108,7 @@ public class CourseController {
     @PostMapping("/{courseId}/approve")
     public ApiResponse<CourseResponse> approve(@PathVariable Integer courseId,
                                                @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã duyệt và xuất bản khoá học",
+        return ApiResponse.success("Đã duyệt và xuất bản lộ trình",
                 courseService.approve(me.getUsername(), courseId));
     }
 
@@ -153,7 +118,7 @@ public class CourseController {
             @PathVariable Integer courseId,
             @RequestBody(required = false) CourseReviewRequest request,
             @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã trả lại khoá học cho tác giả",
+        return ApiResponse.success("Đã trả lại lộ trình cho tác giả",
                 courseService.reject(me.getUsername(), courseId, request));
     }
 
@@ -180,7 +145,7 @@ public class CourseController {
     @PostMapping("/{courseId}/enroll")
     public ApiResponse<CourseResponse> enroll(@PathVariable Integer courseId,
                                               @AuthenticationPrincipal UserDetails me) {
-        return ApiResponse.success("Đã ghi danh khoá học",
+        return ApiResponse.success("Đã bắt đầu lộ trình",
                 courseService.enroll(me.getUsername(), courseId));
     }
 
@@ -191,10 +156,7 @@ public class CourseController {
         return ApiResponse.success(courseService.getLesson(me.getUsername(), courseId, lessonId));
     }
 
-    /**
-     * Đánh dấu đã đọc xong. Trả về khoá kèm phần trăm mới để màn hình cập nhật
-     * ngay, khỏi phải gọi thêm một lượt nữa.
-     */
+    /** Đánh dấu đã đọc xong. Trả về khoá kèm phần trăm mới để màn hình cập nhật ngay. */
     @PostMapping("/{courseId}/lessons/{lessonId}/complete")
     public ApiResponse<CourseResponse> complete(@PathVariable Integer courseId,
                                                 @PathVariable Integer lessonId,
@@ -203,8 +165,8 @@ public class CourseController {
                 courseService.completeLesson(me.getUsername(), courseId, lessonId);
         return ApiResponse.success(
                 course.getProgressPercent() == 100
-                        ? "Hoàn thành khoá học 🎉"
-                        : "Đã học xong bài này — " + course.getProgressPercent() + "%",
+                        ? "Hoàn thành lộ trình ôn tập 🎉"
+                        : "Đã qua chặng — " + course.getProgressPercent() + "%",
                 course);
     }
 }

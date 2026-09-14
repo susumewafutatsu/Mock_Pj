@@ -11,12 +11,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Bản rút gọn của câu hỏi, dùng cho danh sách kết quả lọc/tìm kiếm.
- * <p>
- * Cố tình KHÔNG chứa {@code answers} và {@code explanation}: endpoint tìm kiếm mở cho cả thí sinh,
- * trả kèm đáp án đúng ở đây là làm lộ đáp án. Chi tiết đầy đủ lấy qua GET /questions/{questionId}.
- */
+/** Bản rút gọn của câu hỏi, dùng cho danh sách kết quả lọc/tìm kiếm. */
 @Data
 @Builder
 @NoArgsConstructor

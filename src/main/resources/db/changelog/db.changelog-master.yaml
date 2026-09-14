@@ -46,21 +46,17 @@ databaseChangeLog:
       file: db/changelog/v1.0.2/01-exam-session-hardening.yaml
       relativeToChangelogFile: false
 
-  # ── v1.0.3: Dữ liệu mẫu để test. Chỉ nạp khi bật context "demo"
-  #    (spring.liquibase.contexts=demo). Không bật thì file này bị bỏ qua. ──
+  # v1.0.3: Dữ liệu mẫu để test.
   - include:
       file: db/changelog/v1.0.3/01-seed-demo-data.yaml
       relativeToChangelogFile: false
 
-  # ── v1.0.4: Danh mục dùng chung (môn học + trình độ). KHÔNG có context
-  #    nên luôn chạy: cả team đều có cùng bộ LevelID để tạo lớp / tạo đề. ──
+  # v1.0.4: Danh mục dùng chung (môn học + trình độ).
   - include:
       file: db/changelog/v1.0.4/01-seed-catalog.yaml
       relativeToChangelogFile: false
 
-  # ── v1.0.5: Đủ đề tự do để nhìn thấy bộ lọc trình độ và thanh phân trang
-  #    hoạt động, cộng một lớp thứ hai để trang chủ có nhiều hơn một nhóm.
-  #    Cũng thuộc context "demo" nên không bật thì bị bỏ qua. ──
+  # v1.0.5: Đủ đề tự do để nhìn thấy bộ lọc trình độ và thanh phân trang hoạt động.
   - include:
       file: db/changelog/v1.0.5/01-seed-practice-exams.yaml
       relativeToChangelogFile: false
@@ -79,17 +75,12 @@ databaseChangeLog:
       file: db/changelog/v1.1.0/03-seed-tags.yaml
       relativeToChangelogFile: false
 
-  # ── v1.2.0: Nhiều lượt làm bài (Exams.MaxAttempts) + cho xem lại bài đã
-  #    nộp kèm đáp án (Exams.AllowReview). Xem chú thích trong file. ──
+  # v1.2.0: Nhiều lượt làm bài (Exams.MaxAttempts) + cho xem lại bài đã nộp kèm đáp án (Exams.AllowReview).
   - include:
       file: db/changelog/v1.2.0/01-exam-attempts-and-review.yaml
       relativeToChangelogFile: false
 
-  # ── v1.4.0: Nghiệp vụ HỌC TẬP (revision_plan.md §3.4) ────────
-  #    Sổ tay câu sai + từ vựng/kanji + bộ thẻ + lịch lặp lại ngắt
-  #    quãng. Tách hẳn khỏi nghiệp vụ thi: không bảng nào ở đây tham
-  #    chiếu Exams/Submissions, trừ MistakeEntries trỏ tới Questions
-  #    để lấy lại đề bài của câu đã làm sai.
+  # v1.4.0: Nghiệp vụ HỌC TẬP (revision_plan.md §3.4) Sổ tay câu sai + từ vựng/kanji + bộ thẻ + lịch lặp lại ngắt quãng.
   - include:
       file: db/changelog/v1.4.0/01-create-mistake-book.yaml
       relativeToChangelogFile: false
@@ -104,10 +95,7 @@ databaseChangeLog:
       file: db/changelog/v1.4.0/03-seed-vocab-kanji-n5.yaml
       relativeToChangelogFile: false
 
-  # ── v1.5.0: Bỏ Lớp học, chuyển sang Phòng thi (revision_plan.md §2)
-  #    Ba file tách riêng có chủ đích: 01 tạo bảng (an toàn), 02 chuyển dữ
-  #    liệu (cần kiểm lại), 03 xoá bảng cũ (KHÔNG LÙI ĐƯỢC). Đọc phần đầu
-  #    file 03 trước khi cho chạy trên DB có dữ liệu thật.
+  # v1.5.0: Bỏ Lớp học, chuyển sang Phòng thi (revision_plan.md §2) Ba file tách riêng có chủ đích.
   - include:
       file: db/changelog/v1.5.0/01-create-rooms.yaml
       relativeToChangelogFile: false
@@ -120,14 +108,54 @@ databaseChangeLog:
       file: db/changelog/v1.5.0/03-drop-classes.yaml
       relativeToChangelogFile: false
 
-  # ── v1.6.0: Khoá học (revision_plan.md §3.4c) ────────────────
-  #    Bài học lý thuyết để đọc, bấm hoàn thành là ra phần trăm. Người ra
-  #    đề soạn, Admin duyệt rồi mới xuất bản. Đây là chỗ chứa NGỮ PHÁP và
-  #    CHỮ HÁN — hai loại nội dung mà bộ thẻ ở v1.4.0 không diễn tả nổi.
+  # v1.6.0: Khoá học (revision_plan.md §3.4c) Bài học lý thuyết để đọc, bấm hoàn thành là ra phần trăm.
   - include:
       file: db/changelog/v1.6.0/01-create-courses.yaml
       relativeToChangelogFile: false
 
   - include:
       file: db/changelog/v1.6.0/02-seed-demo-course.yaml
+      relativeToChangelogFile: false
+
+  # v1.7.0: Trang quản trị — khoá tài khoản thay cho xoá (xem chú thích trong file để biết vì sao không xoá cứng người dùng).
+  - include:
+      file: db/changelog/v1.7.0/01-user-lock.yaml
+      relativeToChangelogFile: false
+
+  # Khoá học → lộ trình ôn tập: chặng mở tuần tự, chặng có bài kiểm tra thì phải đạt ngưỡng mới qua.
+  - include:
+      file: db/changelog/v1.7.0/02-study-path-stages.yaml
+      relativeToChangelogFile: false
+
+  # v1.8.0: Chất JLPT của đề thi Đề chia phần có đồng hồ riêng, điểm quy đổi theo kỹ năng với kết luận Đỗ/Trượt.
+  - include:
+      file: db/changelog/v1.8.0/01-exam-sections.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.8.0/02-reading-passages.yaml
+      relativeToChangelogFile: false
+
+  - include:
+      file: db/changelog/v1.8.0/03-question-types.yaml
+      relativeToChangelogFile: false
+
+  # v1.9.0: Nghe (audio + giới hạn lượt nghe), thông báo trong app, đánh dấu câu kèm ghi chú, bài xếp trình độ.
+  - include:
+      file: db/changelog/v1.9.0/01-wave4.yaml
+      relativeToChangelogFile: false
+
+  # v2.0.0: Bộ dữ liệu thật — CHỈ nạp khi bật context "realdata" (LIQUIBASE_CONTEXTS=demo,realdata).
+  - include:
+      file: db/changelog/v2.0.0/01-realdata.yaml
+      relativeToChangelogFile: false
+
+  # ── v2.1.0: Làm lại phòng thi ──
+  - include:
+      file: db/changelog/v2.1.0/01-room-rework.yaml
+      relativeToChangelogFile: false
+
+  # ── v2.2.0: Làm lại thẻ ghi nhớ ──
+  - include:
+      file: db/changelog/v2.2.0/01-flashcard-rework.yaml
       relativeToChangelogFile: false

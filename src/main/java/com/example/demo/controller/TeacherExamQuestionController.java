@@ -31,10 +31,7 @@ public class TeacherExamQuestionController {
                 Map.of("added", added));
     }
 
-    /**
-     * Cập nhật snapshot theo bản mới nhất trong ngân hàng câu hỏi.
-     * Trả 409 nếu đề đã có thí sinh làm bài.
-     */
+    /** Cập nhật snapshot theo bản mới nhất trong ngân hàng câu hỏi. */
     @PostMapping("/{questionId}/refresh-snapshot")
     public ApiResponse<Void> refresh(@PathVariable Integer examId,
                                      @PathVariable Integer questionId,

@@ -26,35 +26,26 @@ public class JwtUtils {
     @Value("${jwt.refresh-expiration-ms}")
     private Long refreshExpirationMs;
 
-    /**
-     * Lấy secret key từ chuỗi
-     */
+    /** Lấy secret key từ chuỗi */
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Tạo access token từ UserDetails
-     */
+    /** Tạo access token từ UserDetails */
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", userDetails.getAuthorities().iterator().next().getAuthority());
         return createToken(claims, userDetails.getUsername());
     }
 
-    /**
-     * Tạo access token trực tiếp từ email + role (dùng cho luồng OAuth2 Google,
-     * nơi principal là OAuth2User chứ không phải UserDetails)
-     */
+    /** Tạo access token trực tiếp từ email + role (dùng cho luồng OAuth2 Google, nơi principal là OAuth2User chứ không phải UserDetails) */
     public String generateToken(String email, String role) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
         return createToken(claims, email);
     }
 
-    /**
-     * Tạo refresh token
-     */
+    /** Tạo refresh token */
     public String generateRefreshToken(String username) {
         return Jwts.builder()
                 .subject(username)
@@ -64,9 +55,7 @@ public class JwtUtils {
                 .compact();
     }
 
-    /**
-     * Tạo token với claims
-     */
+    /** Tạo token với claims */
     private String createToken(Map<String, Object> claims, String subject) {
         return Jwts.builder()
                 .claims(claims)
@@ -77,43 +66,36 @@ public class JwtUtils {
                 .compact();
     }
 
-    /**
-     * Validate token
-     */
+    /** Validate token */
     public Boolean validateToken(String token, UserDetails userDetails) {
         try {
             final String username = extractUsername(token);
-            return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+            // Tài khoản bị khoá thì token còn hạn cũng không dùng được nữa.
+            return (username.equals(userDetails.getUsername())
+                    && userDetails.isAccountNonLocked()
+                    && !isTokenExpired(token));
         } catch (Exception e) {
             return false;
         }
     }
 
-    /**
-     * Extract username từ token
-     */
+    /** Extract username từ token */
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    /**
-     * Extract expiration date từ token
-     */
+    /** Extract expiration date từ token */
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    /**
-     * Extract claim từ token
-     */
+    /** Extract claim từ token */
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    /**
-     * Extract all claims từ token
-     */
+    /** Extract all claims từ token */
     private Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -122,9 +104,7 @@ public class JwtUtils {
                 .getPayload();
     }
 
-    /**
-     * Kiểm tra token đã hết hạn chưa
-     */
+    /** Kiểm tra token đã hết hạn chưa */
     private Boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }

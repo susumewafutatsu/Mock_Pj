@@ -19,4 +19,6 @@ public interface QuestionBankRepository extends JpaRepository<QuestionBank, Inte
     Optional<QuestionBank> findByBankIdAndTeacher_UserId(Integer bankId, String teacherId);
 
     boolean existsByBankIdAndTeacher_UserId(Integer bankId, String teacherId);
+
+    long countByTeacher_UserId(String teacherId);
 }

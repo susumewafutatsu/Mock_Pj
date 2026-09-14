@@ -1,6 +1,7 @@
 package com.example.demo.dto.request;
 
 import com.example.demo.domain.enums.JoinPolicy;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -10,7 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** Tạo phòng thi mới. Mã phòng do server sinh, client không được tự đặt. */
+/** Tạo phòng thi. Mã phòng do server sinh. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -20,14 +21,11 @@ public class RoomCreateRequest {
     @Size(max = 100, message = "Tên phòng tối đa 100 ký tự")
     private String name;
 
+    /** Đề thi của buổi thi. */
+    private Integer examId;
+
     private Integer levelId;
 
-    /**
-     * Sức chứa. Bỏ trống = không giới hạn.
-     *
-     * Không cho 0: một phòng không nhận được ai thì tạo ra để làm gì. Muốn
-     * chặn người vào thì để phòng ở trạng thái DRAFT.
-     */
     @Min(value = 1, message = "Sức chứa phải từ 1 người trở lên")
     private Integer capacity;
 
@@ -36,4 +34,14 @@ public class RoomCreateRequest {
     private LocalDateTime startTime;
 
     private LocalDateTime endTime;
+
+    @Min(value = 0, message = "Số phút cho vào muộn không được âm")
+    @Max(value = 180, message = "Số phút cho vào muộn tối đa 180")
+    private Integer lateJoinMinutes;
+
+    @Size(max = 2000, message = "Lời dặn tối đa 2000 ký tự")
+    private String instructions;
+
+    /** Mở sảnh chờ ngay sau khi tạo. */
+    private Boolean openLobby;
 }

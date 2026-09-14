@@ -4,10 +4,7 @@ import {
   Upload, Mail, MessageCircle, PlusCircle, ChevronRight, Search,
 } from "lucide-react";
 
-/* ============================================================
-   TOKENS — "Sổ Điểm Chung": cuốn sổ điểm giấy dùng chung.
-   Vai trò Quản trị viên viết bằng mực đen.
-   ============================================================ */
+/* TOKENS — "Sổ Điểm Chung": cuốn sổ điểm giấy dùng chung. */
 const TOKENS = `
 @import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 

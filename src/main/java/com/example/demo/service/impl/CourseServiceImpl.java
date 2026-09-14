@@ -45,21 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Cài đặt khoá học.
- *
- * Hai chỗ đáng đọc kỹ:
- *
- * 1. {@link #describe} — phần trăm tiến độ được tính Ở SERVER và tính theo lô.
- *    Màn "khoá của tôi" hiện nhiều khoá cùng lúc, mỗi khoá cần tử số (số bài đã
- *    xong) và mẫu số (tổng số bài); hỏi từng khoá một là hai truy vấn cho mỗi
- *    dòng trên màn hình.
- *
- * 2. {@link #requireAuthoredCourse} và {@link #requireVisibleCourse} — hai luật
- *    truy cập khác hẳn nhau. Tác giả thấy khoá của mình ở mọi trạng thái; thí
- *    sinh chỉ thấy khoá đã xuất bản, và khoá chưa xuất bản trả 404 chứ không
- *    403 để không lộ ra là nó tồn tại.
- */
+/** Cài đặt LỘ TRÌNH ÔN TẬP (trong code vẫn tên Course / CourseLesson — đổi tên bảng và lớp là một đợt chuyển dữ liệu không mang lại gì cho người dùng). */
 @Service
 @RequiredArgsConstructor
 public class CourseServiceImpl implements CourseService {
@@ -67,6 +53,8 @@ public class CourseServiceImpl implements CourseService {
     private static final Logger log = LoggerFactory.getLogger(CourseServiceImpl.class);
 
     private final CourseRepository courseRepository;
+
+    private final com.example.demo.service.NotificationService notificationService;
     private final CourseLessonRepository lessonRepository;
     private final CourseEnrollmentRepository enrollmentRepository;
     private final LessonCompletionRepository completionRepository;
@@ -74,6 +62,8 @@ public class CourseServiceImpl implements CourseService {
     private final DeckRepository deckRepository;
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
+    private final com.example.demo.repository.ExamSubmissionRepository submissionRepository;
+    private final com.example.demo.repository.ExamQuestionRepository examQuestionRepository;
 
     // ── Người ra đề ────────────────────────────────────────────────────────
 
@@ -126,8 +116,8 @@ public class CourseServiceImpl implements CourseService {
 
         if (enrollmentRepository.countById_CourseId(courseId) > 0) {
             throw new BusinessException(
-                    "Khoá học đã có người theo học, không xoá được. "
-                            + "Hãy sửa nội dung thay vì xoá cả khoá.");
+                    "Lộ trình đã có người theo, không xoá được. "
+                            + "Hãy sửa nội dung thay vì xoá cả lộ trình.");
         }
         courseRepository.delete(course);
         log.info("Xoá khoá học courseId={} author={}", courseId, author.getUserId());
@@ -141,14 +131,14 @@ public class CourseServiceImpl implements CourseService {
 
         // Khoá rỗng gửi duyệt là bắt Admin mở ra rồi từ chối — chặn ngay ở đây.
         if (lessonRepository.countByCourse_CourseId(courseId) == 0) {
-            throw new BusinessException("Khoá học chưa có bài nào, chưa gửi duyệt được");
+            throw new BusinessException("Lộ trình chưa có chặng nào, chưa gửi duyệt được");
         }
         try {
             course.submitForReview();
         } catch (IllegalStateException e) {
             throw new BusinessException(course.getStatus() == CourseStatus.PENDING
-                    ? "Khoá học đang chờ duyệt rồi"
-                    : "Khoá học đã được xuất bản");
+                    ? "Lộ trình đang chờ duyệt rồi"
+                    : "Lộ trình đã được xuất bản");
         }
         courseRepository.save(course);
         log.info("Gửi duyệt khoá học courseId={}", courseId);
@@ -173,6 +163,7 @@ public class CourseServiceImpl implements CourseService {
                 .estimatedMinutes(request.getEstimatedMinutes())
                 .deck(resolveDeck(request.getDeckId()))
                 .exam(resolveExam(request.getExamId()))
+                .minScorePercent(validPassPercent(request.getMinScorePercent()))
                 // Để trống thì xếp xuống cuối — thứ tự người soạn thêm bài
                 // gần như luôn là thứ tự họ muốn dạy.
                 .orderNo(request.getOrderNo() == null ? (int) current + 1 : request.getOrderNo())
@@ -201,6 +192,7 @@ public class CourseServiceImpl implements CourseService {
         lesson.setEstimatedMinutes(request.getEstimatedMinutes());
         lesson.setDeck(resolveDeck(request.getDeckId()));
         lesson.setExam(resolveExam(request.getExamId()));
+        lesson.setMinScorePercent(validPassPercent(request.getMinScorePercent()));
         if (request.getOrderNo() != null) {
             lesson.setOrderNo(request.getOrderNo());
         }
@@ -220,9 +212,7 @@ public class CourseServiceImpl implements CourseService {
         requireEditable(course);
         CourseLesson lesson = requireLessonOf(course, lessonId);
 
-        // FK LessonCompletions → CourseLessons có ON DELETE CASCADE, nên xoá bài
-        // là xoá luôn dấu hoàn thành của mọi người trên bài đó. Đó là hành vi
-        // đúng: bài không còn thì tiến độ trên nó cũng không còn nghĩa.
+        // FK LessonCompletions → CourseLessons có ON DELETE CASCADE.
         lessonRepository.delete(lesson);
         course.markContentChanged();
         courseRepository.save(course);
@@ -244,13 +234,18 @@ public class CourseServiceImpl implements CourseService {
         User admin = requireAdmin(adminEmail);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy khoá học id=" + courseId));
+                        "Không tìm thấy lộ trình id=" + courseId));
         if (course.getStatus() != CourseStatus.PENDING) {
-            throw new BusinessException("Khoá học không ở trạng thái chờ duyệt");
+            throw new BusinessException("Lộ trình không ở trạng thái chờ duyệt");
         }
         course.approve(admin, DbTime.now());
         courseRepository.save(course);
         log.info("Duyệt khoá học courseId={} admin={}", courseId, admin.getUserId());
+        notificationService.notify(course.getAuthor(),
+                com.example.demo.service.NotificationService.Kind.COURSE_APPROVED,
+                "Lộ trình \"" + course.getTitle() + "\" đã được duyệt",
+                "Lộ trình đã xuất bản — học viên tìm thấy và ghi danh được rồi.",
+                "/teacher/courses");
         return describe(course, admin);
     }
 
@@ -261,9 +256,9 @@ public class CourseServiceImpl implements CourseService {
         User admin = requireAdmin(adminEmail);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy khoá học id=" + courseId));
+                        "Không tìm thấy lộ trình id=" + courseId));
         if (course.getStatus() != CourseStatus.PENDING) {
-            throw new BusinessException("Khoá học không ở trạng thái chờ duyệt");
+            throw new BusinessException("Lộ trình không ở trạng thái chờ duyệt");
         }
         String note = request == null ? null : trimToNull(request.getNote());
         // Từ chối không kèm lý do thì tác giả chỉ biết là bị trả về, không biết
@@ -274,6 +269,12 @@ public class CourseServiceImpl implements CourseService {
         course.reject(admin, note, DbTime.now());
         courseRepository.save(course);
         log.info("Từ chối khoá học courseId={} admin={}", courseId, admin.getUserId());
+        // Kèm nguyên văn lý do: tác giả cần biết sửa gì, không chỉ biết là bị trả về.
+        notificationService.notify(course.getAuthor(),
+                com.example.demo.service.NotificationService.Kind.COURSE_REJECTED,
+                "Lộ trình \"" + course.getTitle() + "\" bị trả lại",
+                "Lý do: " + note,
+                "/teacher/courses");
         return describe(course, admin);
     }
 
@@ -338,7 +339,7 @@ public class CourseServiceImpl implements CourseService {
             }
         }
         if (index < 0) {
-            throw new ResourceNotFoundException("Không tìm thấy bài học id=" + lessonId);
+            throw new ResourceNotFoundException("Không tìm thấy chặng id=" + lessonId);
         }
 
         CourseLesson lesson = lessons.get(index);
@@ -346,6 +347,10 @@ public class CourseServiceImpl implements CourseService {
         Exam exam = lesson.getExam();
         Set<Integer> done = new HashSet<>(
                 completionRepository.findCompletedLessonIds(user.getUserId(), courseId));
+        if (!isPrivileged(course, user)) {
+            requireUnlocked(lessons, index, done);
+        }
+        Double best = exam == null ? null : bestPercent(user, exam);
 
         return LessonDetailResponse.builder()
                 .lessonId(lesson.getLessonId())
@@ -361,6 +366,9 @@ public class CourseServiceImpl implements CourseService {
                 .examId(exam == null ? null : exam.getExamId())
                 .examTitle(exam == null ? null : exam.getTitle())
                 .completed(done.contains(lessonId))
+                .minScorePercent(exam == null ? null : lesson.passPercent())
+                .bestScorePercent(best)
+                .examPassed(exam == null || (best != null && best >= lesson.passPercent()))
                 // Điều hướng tính sẵn ở server: client không phải giữ cả danh
                 // sách bài chỉ để biết bài kế tiếp là bài nào.
                 .previousLessonId(index > 0 ? lessons.get(index - 1).getLessonId() : null)
@@ -375,6 +383,23 @@ public class CourseServiceImpl implements CourseService {
         User user = requireUser(userEmail);
         Course course = requireVisibleCourse(courseId, user);
         CourseLesson lesson = requireLessonOf(course, lessonId);
+
+        // Hai luật biến danh sách bài thành LỘ TRÌNH: 1. Đi tuần tự — chặng trước chưa qua thì chặng này chưa mở.
+        List<CourseLesson> lessons =
+                lessonRepository.findByCourse_CourseIdOrderByOrderNoAsc(courseId);
+        Set<Integer> done = new HashSet<>(
+                completionRepository.findCompletedLessonIds(user.getUserId(), courseId));
+        int index = lessons.indexOf(lesson);
+        requireUnlocked(lessons, index, done);
+        if (lesson.getExam() != null) {
+            Double best = bestPercent(user, lesson.getExam());
+            if (best == null || best < lesson.passPercent()) {
+                throw new BusinessException("Chặng này có bài kiểm tra \"" + lesson.getExam().getTitle()
+                        + "\": cần đạt từ " + lesson.passPercent() + "% để qua chặng. "
+                        + (best == null ? "Bạn chưa làm bài này."
+                                : "Điểm tốt nhất của bạn: " + Math.round(best) + "%."));
+            }
+        }
 
         // Đọc bài mà chưa ghi danh thì ghi danh luôn — bắt người ta quay lại
         // bấm một nút nữa chỉ để đếm được tiến độ là thừa.
@@ -404,19 +429,33 @@ public class CourseServiceImpl implements CourseService {
                 lessonRepository.findByCourse_CourseIdOrderByOrderNoAsc(course.getCourseId());
         Set<Integer> done = new HashSet<>(completionRepository
                 .findCompletedLessonIds(viewer.getUserId(), course.getCourseId()));
+        boolean privileged = isPrivileged(course, viewer);
 
-        List<LessonSummaryResponse> rows = lessons.stream()
-                .map(l -> LessonSummaryResponse.builder()
-                        .lessonId(l.getLessonId())
-                        .orderNo(l.getOrderNo())
-                        .title(l.getTitle())
-                        .lessonType(l.getLessonType())
-                        .estimatedMinutes(l.getEstimatedMinutes())
-                        .hasDeck(l.getDeck() != null)
-                        .hasExam(l.getExam() != null)
-                        .completed(done.contains(l.getLessonId()))
-                        .build())
-                .toList();
+        List<LessonSummaryResponse> rows = new java.util.ArrayList<>(lessons.size());
+        // Chặng đầu tiên chưa qua là chặng đang mở; mọi chặng sau nó còn khoá.
+        boolean blocked = false;
+        for (CourseLesson l : lessons) {
+            Exam exam = l.getExam();
+            rows.add(LessonSummaryResponse.builder()
+                    .lessonId(l.getLessonId())
+                    .orderNo(l.getOrderNo())
+                    .title(l.getTitle())
+                    .lessonType(l.getLessonType())
+                    .estimatedMinutes(l.getEstimatedMinutes())
+                    .hasDeck(l.getDeck() != null)
+                    .hasExam(exam != null)
+                    .completed(done.contains(l.getLessonId()))
+                    .locked(!privileged && blocked)
+                    .examId(exam == null ? null : exam.getExamId())
+                    .examTitle(exam == null ? null : exam.getTitle())
+                    .deckId(l.getDeck() == null ? null : l.getDeck().getDeckId())
+                    .minScorePercent(exam == null ? null : l.passPercent())
+                    .bestScorePercent(exam == null ? null : bestPercent(viewer, exam))
+                    .build());
+            if (!done.contains(l.getLessonId())) {
+                blocked = true;
+            }
+        }
 
         return CourseDetailResponse.builder()
                 .course(describe(course, viewer, lessons.size(), done.size(),
@@ -435,13 +474,7 @@ public class CourseServiceImpl implements CourseService {
                 enrollmentRepository.existsById_UserIdAndId_CourseId(viewer.getUserId(), courseId));
     }
 
-    /**
-     * Dựng response cho cả một danh sách khoá.
-     *
-     * Gộp phần đếm thành hai truy vấn cho toàn bộ danh sách thay vì hai truy vấn
-     * cho mỗi khoá — màn hình này hiện nhiều khoá cùng lúc và mỗi khoá cần cả tử
-     * số lẫn mẫu số của phần trăm.
-     */
+    /** Dựng response cho cả một danh sách khoá. */
     private List<CourseResponse> describeAll(List<Course> courses, User viewer) {
         if (courses.isEmpty()) {
             return List.of();
@@ -510,40 +543,26 @@ public class CourseServiceImpl implements CourseService {
     private Course requireAuthoredCourse(Integer courseId, User author) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy khoá học id=" + courseId));
+                        "Không tìm thấy lộ trình id=" + courseId));
         if (!course.isAuthoredBy(author.getUserId())) {
             // 404 chứ không 403: người ngoài không cần biết khoá đó có tồn tại.
-            throw new ResourceNotFoundException("Không tìm thấy khoá học id=" + courseId);
+            throw new ResourceNotFoundException("Không tìm thấy lộ trình id=" + courseId);
         }
         return course;
     }
 
-    /**
-     * Khoá mà người này được xem.
-     *
-     * Tác giả và Admin thấy mọi trạng thái. Người còn lại chỉ thấy khoá đã xuất
-     * bản — VÀ khoá mình đã ghi danh, kể cả khi nó vừa quay lại hàng đợi duyệt.
-     *
-     * Vế thứ hai không phải chi tiết vụn: tác giả sửa một lỗi chính tả là khoá
-     * chuyển về PENDING (xem {@link Course#markContentChanged()}), và nếu chỉ
-     * xét PUBLISHED thì mọi người đang học dở đột nhiên mất quyền vào giữa
-     * chừng — bài họ đang đọc biến mất mà không ai giải thích gì. Cửa kiểm sinh
-     * ra để chặn nội dung xấu ĐƯỢC PHÁT HIỆN VÀ ADOPT, không phải để giật khoá
-     * khỏi tay người đã theo nó.
-     *
-     * Khoá chưa xuất bản trả 404 chứ không 403, để không lộ ra là nó tồn tại.
-     */
+    /** Khoá mà người này được xem. */
     private Course requireVisibleCourse(Integer courseId, User viewer) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy khoá học id=" + courseId));
+                        "Không tìm thấy lộ trình id=" + courseId));
         boolean allowed = course.isPublished()
                 || course.isAuthoredBy(viewer.getUserId())
                 || viewer.getRole() == Role.ADMIN
                 || enrollmentRepository.existsById_UserIdAndId_CourseId(
                         viewer.getUserId(), courseId);
         if (!allowed) {
-            throw new ResourceNotFoundException("Không tìm thấy khoá học id=" + courseId);
+            throw new ResourceNotFoundException("Không tìm thấy lộ trình id=" + courseId);
         }
         return course;
     }
@@ -551,7 +570,7 @@ public class CourseServiceImpl implements CourseService {
     private void requireEditable(Course course) {
         if (!course.getStatus().isEditableByAuthor()) {
             throw new BusinessException(
-                    "Khoá học đang chờ duyệt, không sửa được. "
+                    "Lộ trình đang chờ duyệt, không sửa được. "
                             + "Đợi Admin xem xong rồi sửa tiếp.");
         }
     }
@@ -559,11 +578,10 @@ public class CourseServiceImpl implements CourseService {
     private CourseLesson requireLessonOf(Course course, Integer lessonId) {
         CourseLesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy bài học id=" + lessonId));
-        // Bài phải thuộc đúng khoá trên đường dẫn. Thiếu bước này thì sửa được
-        // bài của khoá người khác chỉ bằng cách ghép id chéo nhau.
+                        "Không tìm thấy chặng id=" + lessonId));
+        // Bài phải thuộc đúng khoá trên đường dẫn.
         if (!lesson.getCourse().getCourseId().equals(course.getCourseId())) {
-            throw new ResourceNotFoundException("Không tìm thấy bài học id=" + lessonId);
+            throw new ResourceNotFoundException("Không tìm thấy chặng id=" + lessonId);
         }
         return lesson;
     }
@@ -581,18 +599,82 @@ public class CourseServiceImpl implements CourseService {
         if (deckId == null) {
             return null;
         }
-        return deckRepository.findById(deckId)
+        Deck deck = deckRepository.findById(deckId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy bộ thẻ id=" + deckId));
+        // Bộ riêng của học viên không được gắn vào lộ trình.
+        if (!deck.isSystemDeck()) {
+            throw new ResourceNotFoundException("Không tìm thấy bộ thẻ id=" + deckId);
+        }
+        return deck;
     }
 
     private Exam resolveExam(Integer examId) {
         if (examId == null) {
             return null;
         }
-        return examRepository.findById(examId)
+        Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Không tìm thấy bài thi id=" + examId));
+        // Đề chỉ nằm trong phòng thì người theo lộ trình không vào làm được (không ở trong phòng đó)
+        if (!Boolean.TRUE.equals(exam.getIsPublic())) {
+            throw new BusinessException("Bài kiểm tra của chặng phải là đề tự do (công khai). "
+                    + "Đề \"" + exam.getTitle() + "\" chỉ làm được trong phòng thi, "
+                    + "người theo lộ trình sẽ không vào làm được.");
+        }
+        return exam;
+    }
+
+    private Integer validPassPercent(Integer percent) {
+        if (percent == null) {
+            return null;
+        }
+        if (percent < 1 || percent > 100) {
+            throw new BusinessException("Điểm tối thiểu để qua chặng phải từ 1 đến 100%");
+        }
+        return percent;
+    }
+
+    /** Tác giả và Admin đọc được mọi chặng — họ soạn và duyệt, không đi lộ trình. */
+    private boolean isPrivileged(Course course, User viewer) {
+        return course.isAuthoredBy(viewer.getUserId()) || viewer.getRole() == Role.ADMIN;
+    }
+
+    /** Chặng ở vị trí {@code index} chỉ mở khi mọi chặng đứng trước đã qua. */
+    private void requireUnlocked(List<CourseLesson> lessons, int index, Set<Integer> done) {
+        for (int i = 0; i < index; i++) {
+            if (!done.contains(lessons.get(i).getLessonId())) {
+                throw new BusinessException("Chặng này chưa mở. Hãy qua chặng "
+                        + lessons.get(i).getOrderNo() + " — \"" + lessons.get(i).getTitle()
+                        + "\" trước.");
+            }
+        }
+    }
+
+    /** Điểm tốt nhất (% điểm tối đa) của người này ở một đề, trên các lượt đã nộp. */
+    private Double bestPercent(User user, Exam exam) {
+        java.math.BigDecimal best = null;
+        for (var s : submissionRepository.findByExam_ExamIdAndStudent_UserIdIn(
+                exam.getExamId(), List.of(user.getUserId()))) {
+            if (s.isInProgress() || s.getTotalScore() == null) {
+                continue;
+            }
+            if (best == null || s.getTotalScore().compareTo(best) > 0) {
+                best = s.getTotalScore();
+            }
+        }
+        if (best == null) {
+            return null;
+        }
+        java.math.BigDecimal max = java.math.BigDecimal.ZERO;
+        for (var q : examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId())) {
+            max = max.add(q.getPoints() != null ? q.getPoints() : java.math.BigDecimal.ONE);
+        }
+        if (max.signum() == 0) {
+            return null;
+        }
+        return best.multiply(java.math.BigDecimal.valueOf(100))
+                .divide(max, 1, java.math.RoundingMode.HALF_UP).doubleValue();
     }
 
     private User requireUser(String email) {
@@ -603,7 +685,7 @@ public class CourseServiceImpl implements CourseService {
     private User requireAuthor(String email) {
         User user = requireUser(email);
         if (user.getRole() != Role.TEACHER && user.getRole() != Role.ADMIN) {
-            throw new UnauthorizedException("Chỉ người ra đề mới soạn được khoá học");
+            throw new UnauthorizedException("Chỉ người ra đề mới soạn được lộ trình ôn tập");
         }
         return user;
     }
@@ -611,7 +693,7 @@ public class CourseServiceImpl implements CourseService {
     private User requireAdmin(String email) {
         User user = requireUser(email);
         if (user.getRole() != Role.ADMIN) {
-            throw new UnauthorizedException("Chỉ quản trị viên mới duyệt được khoá học");
+            throw new UnauthorizedException("Chỉ quản trị viên mới duyệt được lộ trình ôn tập");
         }
         return user;
     }

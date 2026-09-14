@@ -35,20 +35,11 @@ public class SubmissionDetail {
     private Question question;
 
 
-    /**
-     * Đáp án học sinh chọn, tính theo snapshot của đề thi.
-     * Đây là cột dùng để chấm và để giải thích lại kết quả về sau.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "SelectedSnapshotAnswerID")
     private ExamQuestionAnswer selectedSnapshotAnswer;
 
   
-    /**
-     * Đáp án gốc trong ngân hàng câu hỏi — chỉ để truy vết.
-     * KHÔNG dùng cột này để chấm điểm: nội dung của nó có thể đã bị sửa
-     * sau khi học sinh nộp bài.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "SelectedAnswerID")
     private Answer selectedAnswer;
@@ -72,4 +63,9 @@ public class SubmissionDetail {
 
     @Column(name = "AnsweredAt")
     private java.time.LocalDateTime answeredAt;
+
+    /** Số lần thí sinh đã bấm nghe câu này. Đếm ở server để F5 không nghe lại được. */
+    @Column(name = "AudioPlays", nullable = false)
+    @Builder.Default
+    private Integer audioPlays = 0;
 }

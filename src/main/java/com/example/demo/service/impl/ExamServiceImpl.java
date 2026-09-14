@@ -2,6 +2,7 @@ package com.example.demo.service.impl;
 
 import com.example.demo.domain.enums.Role;
 import com.example.demo.domain.enums.MemberStatus;
+import com.example.demo.domain.enums.RoomPhase;
 import com.example.demo.domain.model.Room;
 import com.example.demo.domain.model.Exam;
 import com.example.demo.domain.model.ExamSubmission;
@@ -38,13 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Cài đặt phần "chọn đề để làm" của thí sinh.
- *
- * Ba lối vào (trang chủ, đề của một lớp, đề luyện tập) dùng chung một bộ hàm
- * dựng {@link ExamResponse}, nên trạng thái của một đề luôn được tính giống
- * nhau bất kể thí sinh mở nó từ màn hình nào.
- */
+/** Cài đặt phần "chọn đề để làm" của thí sinh. */
 @Service
 @RequiredArgsConstructor
 public class ExamServiceImpl implements ExamService {
@@ -52,13 +47,7 @@ public class ExamServiceImpl implements ExamService {
     /** Số đề luyện tập hiện ở trang chủ. Xem đầy đủ thì sang trang riêng. */
     private static final int PRACTICE_PREVIEW_SIZE = 6;
 
-    /**
-     * Khoảng cho phép của tham số size.
-     *
-     * Kẹp lại chứ không tin số client gửi lên: một request {@code ?size=100000}
-     * sẽ kéo cả bảng Exams về rồi dựng ngần ấy DTO. Không cần ác ý — chỉ một lỗi
-     * vòng lặp ở front-end là đủ.
-     */
+    /** Khoảng cho phép của tham số size. */
     private static final int MIN_PAGE_SIZE = 1;
     private static final int MAX_PAGE_SIZE = 50;
 
@@ -86,14 +75,7 @@ public class ExamServiceImpl implements ExamService {
                 ? List.of()
                 : examRepository.findByRoomIdIn(roomIds);
 
-        // Trình độ của các phòng đang tham gia — cũng chính là bộ lọc mặc định
-        // cho phần luyện tập bên dưới.
-        //
-        // Chưa vào phòng nào thì không có trình độ nào để lọc. Lúc đó KHÔNG kéo
-        // toàn bộ đề công khai trong hệ thống về chỉ để hiện sáu dòng xem trước —
-        // lấy đúng sáu đề mới nhất. Đổi lại là phần xem trước của trường hợp này
-        // sắp theo "mới nhất" chứ không theo mức độ gấp; chấp nhận được vì chưa
-        // vào phòng nào thì cũng chưa có bài nào được giao.
+        // Trình độ của các phòng đang tham gia — cũng chính là bộ lọc mặc định cho phần luyện tập bên dưới.
         Set<Integer> enrolledLevelIds = levelIdsOf(rooms);
         List<Exam> practiceExams = enrolledLevelIds.isEmpty()
                 ? examRepository.findPracticeExams(null, null,
@@ -108,10 +90,7 @@ public class ExamServiceImpl implements ExamService {
         allExams.addAll(practiceExams);
         Context ctx = contextOf(student, allExams, now);
 
-        // Gom đề theo phòng. Khác thời còn lớp: một đề gắn được vào nhiều phòng,
-        // nên phải tra bảng nối thay vì đọc một cột trên chính đề. Đề nằm ở hai
-        // phòng mà thí sinh đều tham gia sẽ xuất hiện ở cả hai nhóm — đúng như
-        // người dùng mong đợi khi họ nhìn vào từng phòng.
+        // Gom đề theo phòng. Khác thời còn lớp.
         Map<Integer, List<Integer>> examIdsByRoom = new HashMap<>();
         if (!roomIds.isEmpty()) {
             for (Object[] pair : roomExamRepository.findExamRoomPairs(roomIds)) {
@@ -125,23 +104,38 @@ public class ExamServiceImpl implements ExamService {
                     toResponse(exam, ExamResponse.Source.ROOM, ctx));
         }
 
+        Map<Integer, Integer> longestByRoom = new HashMap<>();
+        if (!roomIds.isEmpty()) {
+            for (Object[] row : roomExamRepository.findLongestDurationByRoomIdIn(roomIds)) {
+                longestByRoom.put((Integer) row[0], (Integer) row[1]);
+            }
+        }
+
         // Phòng chưa có đề nào vẫn xuất hiện với danh sách rỗng — thí sinh cần
         // thấy phòng mình ở đó, không phải thấy nó biến mất.
         List<RoomExamGroup> groups = new ArrayList<>(rooms.size());
+        // Bản đã áp pha phòng của từng đề, để đếm huy hiệu "còn n bài".
+        Map<Integer, ExamResponse> pendingByExam = new HashMap<>();
         for (Room room : rooms) {
+            Integer longest = longestByRoom.get(room.getRoomId());
             List<ExamResponse> rows = new ArrayList<>();
             for (Integer examId : examIdsByRoom.getOrDefault(room.getRoomId(), List.of())) {
                 ExamResponse row = roomExamRows.get(examId);
                 if (row != null) {
-                    rows.add(row);
+                    // Mỗi phòng một bản riêng: cùng một đề có thể đang thi ở phòng
+                    // này mà còn ở sảnh chờ ở phòng kia.
+                    ExamResponse adjusted = applyRoomPhase(row, room, longest, now);
+                    rows.add(adjusted);
+                    if (isPending(adjusted)) {
+                        pendingByExam.put(examId, adjusted);
+                    }
                 }
             }
             rows.sort(URGENCY);
-            groups.add(toGroup(room, rows, countPending(rows)));
+            groups.add(toGroup(room, rows, countPending(rows), longest, now));
         }
-        // Đếm trên tập đề DUY NHẤT, không cộng dồn số của từng phòng: một đề
-        // nằm ở hai phòng sẽ bị tính hai lần và huy hiệu "còn n bài" nói dối.
-        int pendingTotal = countPending(new ArrayList<>(roomExamRows.values()));
+        // Đếm trên tập đề DUY NHẤT, không cộng dồn số của từng phòng.
+        int pendingTotal = pendingByExam.size();
         groups.sort(Comparator.comparing(RoomExamGroup::getPendingCount).reversed()
                 .thenComparing(RoomExamGroup::getRoomName, Comparator.nullsLast(String::compareTo)));
 
@@ -168,20 +162,53 @@ public class ExamServiceImpl implements ExamService {
     public List<ExamResponse> getRoomExams(Integer roomId, String studentEmail) {
         User student = requireStudent(studentEmail);
 
-        // 404 chứ không 403: người ngoài phòng không được biết phòng đó có tồn
-        // tại. Cùng một luật với requireCanTakeExam lúc bắt đầu thi, nên không
-        // có phòng nào nhìn thấy được ở đây mà bấm vào lại bị chặn ở bước sau.
+        // 404 chứ không 403: người ngoài phòng không được biết phòng đó có tồn tại.
         if (!roomMemberRepository.existsById_RoomIdAndId_UserIdAndStatus(
                 roomId, student.getUserId(), MemberStatus.ACTIVE)) {
             throw new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId);
         }
 
         LocalDateTime now = LocalDateTime.now();
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng thi id=" + roomId));
+        Integer longest = roomExamRepository.findLongestDurationMinutes(roomId);
         List<Exam> exams = examRepository.findByRoomIdIn(List.of(roomId));
-        List<ExamResponse> rows = toResponses(
-                exams, ExamResponse.Source.ROOM, contextOf(student, exams, now));
+        List<ExamResponse> rows = new ArrayList<>(exams.size());
+        for (ExamResponse row : toResponses(
+                exams, ExamResponse.Source.ROOM, contextOf(student, exams, now))) {
+            rows.add(applyRoomPhase(row, room, longest, now));
+        }
         rows.sort(URGENCY);
         return rows;
+    }
+
+    /** Chỉnh trạng thái của một đề theo pha của phòng chứa nó. */
+    private ExamResponse applyRoomPhase(ExamResponse row, Room room, Integer longest,
+                                        LocalDateTime now) {
+        RoomPhase phase = room.phaseAt(now, longest);
+        ExamResponse.Availability availability = row.getAvailability();
+        if (phase == RoomPhase.WAITING || phase == RoomPhase.DRAFT) {
+            if (availability == ExamResponse.Availability.OPEN
+                    || availability == ExamResponse.Availability.UPCOMING
+                    || availability == ExamResponse.Availability.RETAKEABLE) {
+                availability = ExamResponse.Availability.WAITING_ROOM;
+            }
+        } else if (phase == RoomPhase.ENDED) {
+            // Bài đang dở vẫn giữ IN_PROGRESS: server tự nộp nó trong vài giây.
+            if (availability == ExamResponse.Availability.OPEN
+                    || availability == ExamResponse.Availability.UPCOMING) {
+                availability = ExamResponse.Availability.CLOSED;
+            } else if (availability == ExamResponse.Availability.RETAKEABLE) {
+                availability = ExamResponse.Availability.SUBMITTED;
+            }
+        }
+        return row.toBuilder()
+                .availability(availability)
+                .canRetake(availability == ExamResponse.Availability.RETAKEABLE)
+                .roomPhase(phase)
+                .roomStartTime(room.getStartTime())
+                .roomEndTime(room.endAt(longest))
+                .build();
     }
 
     // ── Đề luyện tập tự do ──────────────────────────────────────────────────
@@ -197,10 +224,7 @@ public class ExamServiceImpl implements ExamService {
         Set<Integer> enrolledLevelIds = enrolledLevelIdsOf(student);
         List<PracticeLevelOption> levelOptions = practiceLevelOptions(enrolledLevelIds);
 
-        // Thí sinh chưa chọn gì thì server chọn hộ một trình độ để mở màn, thay
-        // vì đổ ra toàn bộ đề của mọi trình độ. Chọn theo phòng em đang tham gia và
-        // phải là trình độ THỰC SỰ có đề, nếu không màn hình đầu tiên em thấy
-        // lại là một danh sách rỗng.
+        // Thí sinh chưa chọn gì thì server chọn hộ một trình độ để mở màn, thay vì đổ ra toàn bộ đề của mọi trình độ.
         Integer effectiveLevelId = levelId;
         boolean defaulted = false;
         if (levelId == null && subjectId == null && !allLevels) {
@@ -215,13 +239,6 @@ public class ExamServiceImpl implements ExamService {
         int safeSize = Math.min(Math.max(size, MIN_PAGE_SIZE), MAX_PAGE_SIZE);
 
         // Sắp theo đề mới nhất trước, ngay trong SQL.
-        //
-        // Cố tình KHÔNG dùng thứ tự theo mức độ gấp như hai màn hình kia: mức đó
-        // tính từ bài làm của từng thí sinh nên chỉ có trong bộ nhớ, mà sắp trong
-        // bộ nhớ khi đã phân trang thì chỉ sắp được đúng trang hiện tại — nhìn
-        // thì có thứ tự nhưng thực chất là sai. Đề luyện tập cũng không có hạn
-        // nộp nên "gấp" không phải là khái niệm áp dụng được ở đây; việc còn dở
-        // dang đã được nhắc ở trang chủ.
         Page<Exam> examPage = examRepository.findPracticeExams(
                 effectiveLevelId, subjectId,
                 PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "examId")));
@@ -254,10 +271,7 @@ public class ExamServiceImpl implements ExamService {
         return null;
     }
 
-    /**
-     * Bộ lọc của trang luyện tập: chỉ những trình độ thực sự có đề, kèm số
-     * lượng, và đánh dấu trình độ thí sinh đang học.
-     */
+    /** Bộ lọc của trang luyện tập: chỉ những trình độ thực sự có đề, kèm số lượng. */
     private List<PracticeLevelOption> practiceLevelOptions(Set<Integer> enrolledLevelIds) {
         List<PracticeLevelOption> options = new ArrayList<>();
         for (ExamRepository.PracticeLevelCount row : examRepository.countPracticeExamsByLevel()) {
@@ -275,13 +289,7 @@ public class ExamServiceImpl implements ExamService {
 
     // ── Dựng response ───────────────────────────────────────────────────────
 
-    /**
-     * Dữ liệu dùng chung cho cả lô đề: số câu hỏi của từng đề và bài làm của
-     * thí sinh, mỗi thứ đọc đúng một lần.
-     *
-     * Gom lại thành một object thay vì truyền hai Map rời qua từng hàm, để chỗ
-     * gọi không thể lỡ tay truyền nhầm thứ tự hai tham số cùng kiểu.
-     */
+    /** Dữ liệu dùng chung cho cả lô đề: số câu hỏi của từng đề và bài làm của thí sinh, mỗi thứ đọc đúng một lần. */
     private record Context(Map<Integer, Long> questionCounts,
                            Map<Integer, ExamSubmission> submissions,
                            Map<Integer, Long> attemptCounts,
@@ -300,31 +308,6 @@ public class ExamServiceImpl implements ExamService {
         List<ExamResponse> rows = new ArrayList<>(exams.size());
         for (Exam exam : exams) {
             rows.add(toResponse(exam, source, ctx));
-    private final UserRepository userRepository;
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<ExamResponse> getExamsForStudent(String studentEmail) {
-        User student = requireStudent(studentEmail);
-
-        List<Integer> classIds = classStudentRepository.findClassIdsByStudentId(student.getUserId());
-        List<Exam> exams = classIds.isEmpty()
-                ? examRepository.findFreePracticeExams()
-                : examRepository.findVisibleToStudent(classIds);
-        if (exams.isEmpty()) {
-            return List.of();
-        }
-
-        Map<Integer, Long> questionCounts = questionCountsOf(exams);
-        Map<Integer, ExamSubmission> submissions = submissionsOf(student);
-
-        LocalDateTime now = LocalDateTime.now();
-        List<ExamResponse> rows = new ArrayList<>(exams.size());
-        for (Exam exam : exams) {
-            rows.add(toResponse(exam,
-                    submissions.get(exam.getExamId()),
-                    questionCounts.getOrDefault(exam.getExamId(), 0L).intValue(),
-                    now));
         }
         return rows;
     }
@@ -355,10 +338,6 @@ public class ExamServiceImpl implements ExamService {
                         ? null : level.getSubject().getSubjectId())
                 .subjectName(level == null || level.getSubject() == null
                         ? null : level.getSubject().getSubjectName())
-                .className(classEntity == null ? null : classEntity.getClassName())
-                .subjectName(level == null || level.getSubject() == null
-                        ? null : level.getSubject().getSubjectName())
-                .levelName(level == null ? null : level.getLevelName())
                 .teacherName(exam.getCreatedBy() == null ? null : exam.getCreatedBy().getFullName())
                 .availability(availability)
                 .maxAttempts(exam.getMaxAttempts())
@@ -377,10 +356,14 @@ public class ExamServiceImpl implements ExamService {
                 .build();
     }
 
-    private RoomExamGroup toGroup(Room room, List<ExamResponse> exams, int pending) {
+    private RoomExamGroup toGroup(Room room, List<ExamResponse> exams, int pending,
+                                  Integer longest, LocalDateTime now) {
         SubjectLevel level = room.getLevel();
         return RoomExamGroup.builder()
                 .roomId(room.getRoomId())
+                .phase(room.phaseAt(now, longest))
+                .startTime(room.getStartTime())
+                .endTime(room.endAt(longest))
                 .roomName(room.getName())
                 .ownerName(room.getOwner() == null ? null : room.getOwner().getFullName())
                 .levelName(level == null ? null : level.getLevelName())
@@ -391,22 +374,6 @@ public class ExamServiceImpl implements ExamService {
                 .build();
     }
 
-                .remainingSeconds(inProgress ? submission.remainingSeconds(now) : 0L)
-                .totalScore(submission == null || submission.isInProgress()
-                        ? null : submission.getTotalScore())
-                .submittedAt(submission == null ? null : submission.getSubmittedAt())
-                .serverTime(now)
-                .build();
-    }
-
-    /**
-     * Trạng thái của đề với học sinh đang đăng nhập.
-     *
-     * Thứ tự xét quan trọng: đã nộp thì không quan tâm đề còn mở hay không nữa
-     * (mỗi đề chỉ được làm một lần), và một phiên đang dở đã quá ExpiresAt vẫn
-     * được coi là SUBMITTED — bài đó chắc chắn sẽ bị nộp tự động ở request kế
-     * tiếp hoặc bởi job quét, nên không nên hiện nút "Tiếp tục" cho nó.
-     */
     private ExamResponse.Availability resolveAvailability(Exam exam, ExamSubmission submission,
                                                           int totalQuestions, long attemptsUsed,
                                                           LocalDateTime now) {
@@ -415,9 +382,7 @@ public class ExamServiceImpl implements ExamService {
             if (!finished) {
                 return ExamResponse.Availability.IN_PROGRESS;
             }
-            // Đã nộp. Còn được làm lại hay không là hai điều kiện tách rời: giáo
-            // viên còn cho lượt, VÀ đề vẫn đang trong giờ mở. Hết một trong hai
-            // thì bài chỉ còn để xem lại.
+            // Đã nộp. Còn được làm lại hay không là hai điều kiện tách rời.
             return exam.allowsAttempt(attemptsUsed) && examWindowOpen(exam, now)
                     ? ExamResponse.Availability.RETAKEABLE
                     : ExamResponse.Availability.SUBMITTED;
@@ -444,19 +409,13 @@ public class ExamServiceImpl implements ExamService {
 
     // ── Thứ tự hiển thị ─────────────────────────────────────────────────────
 
-    /**
-     * Mức ưu tiên hiển thị của từng trạng thái. Số nhỏ đứng trước.
-     *
-     * Đây là chỗ thay cho {@code order by startTime desc} cũ. Sắp theo thời gian
-     * tạo trả lời câu hỏi "đề nào mới nhất", nhưng người đang mở màn hình này
-     * hỏi "tôi phải làm gì bây giờ" — và câu trả lời đó là bài đang làm dở
-     * trước, rồi tới bài đang mở, rồi mới tới thứ chưa tới hạn.
-     */
+    /** Mức ưu tiên hiển thị của từng trạng thái. */
     private static int urgencyRank(ExamResponse.Availability availability) {
         return switch (availability) {
             case IN_PROGRESS -> 0;      // đang làm dở, đồng hồ đang chạy
             case OPEN -> 1;             // vào được ngay
             case UPCOMING -> 2;         // sắp tới
+            case WAITING_ROOM -> 2;     // đã vào phòng, chờ người ra đề bắt đầu
             case NO_QUESTIONS -> 3;     // người ra đề chưa gắn câu hỏi
             // Đã làm xong, nhưng còn lượt để luyện lại — vẫn là việc thí sinh CÓ
             // THỂ làm, nên đứng trên nhóm chỉ để xem lại điểm.
@@ -466,10 +425,7 @@ public class ExamServiceImpl implements ExamService {
         };
     }
 
-    /**
-     * Trong cùng một mức ưu tiên thì đề nào gấp hơn đứng trước: sắp đóng trước
-     * (endTime tăng dần), đề không có hạn thì xuống cuối nhóm.
-     */
+    /** Trong cùng một mức ưu tiên thì đề nào gấp hơn đứng trước. */
     private static final Comparator<ExamResponse> URGENCY =
             Comparator.<ExamResponse>comparingInt(r -> urgencyRank(r.getAvailability()))
                     .thenComparing(ExamResponse::getEndTime,
@@ -477,17 +433,22 @@ public class ExamServiceImpl implements ExamService {
                     .thenComparing(ExamResponse::getExamId,
                             Comparator.nullsLast(Comparator.reverseOrder()));
 
-    /** Số đề thí sinh còn phải làm: đang dở, đang mở, hoặc sắp mở. */
+    /** Số đề thí sinh còn phải làm: đang dở, đang mở, sắp mở, hoặc chờ phòng bắt đầu. */
     private int countPending(List<ExamResponse> rows) {
         int pending = 0;
         for (ExamResponse row : rows) {
-            if (row.getAvailability() == ExamResponse.Availability.IN_PROGRESS
-                    || row.getAvailability() == ExamResponse.Availability.OPEN
-                    || row.getAvailability() == ExamResponse.Availability.UPCOMING) {
+            if (isPending(row)) {
                 pending++;
             }
         }
         return pending;
+    }
+
+    private static boolean isPending(ExamResponse row) {
+        return switch (row.getAvailability()) {
+            case IN_PROGRESS, OPEN, UPCOMING, WAITING_ROOM -> true;
+            default -> false;
+        };
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -519,9 +480,6 @@ public class ExamServiceImpl implements ExamService {
             return counts;
         }
         List<Integer> examIds = exams.stream().map(Exam::getExamId).toList();
-    private Map<Integer, Long> questionCountsOf(List<Exam> exams) {
-        List<Integer> examIds = exams.stream().map(Exam::getExamId).toList();
-        Map<Integer, Long> counts = new HashMap<>();
         for (ExamQuestionRepository.ExamQuestionCount row
                 : examQuestionRepository.countByExamIdIn(examIds)) {
             counts.put(row.getExamId(), row.getTotal());
@@ -529,17 +487,7 @@ public class ExamServiceImpl implements ExamService {
         return counts;
     }
 
-    /**
-     * Bài làm của thí sinh, tra theo ExamID — một lượt đọc DB cho cả hai thứ màn
-     * hình danh sách cần biết.
-     *
-     * Từ v1.2.0 một đề có thể có nhiều lượt làm, nên phải nói rõ lấy lượt nào:
-     *
-     *   - {@code latest} giữ lượt có AttemptNumber lớn nhất. Danh sách đề hiện
-     *     tình trạng HIỆN TẠI của thí sinh ("đang làm dở", "vừa nộp xong"), mà
-     *     tình trạng đó thuộc về lượt gần nhất chứ không phải lượt điểm cao nhất.
-     *   - {@code attempts} đếm tổng số lượt, để tính còn được làm lại mấy lần.
-     */
+    /** Bài làm của thí sinh, tra theo ExamID — một lượt đọc DB cho cả hai thứ màn hình danh sách cần biết. */
     private void collectSubmissions(User student,
                                     Map<Integer, ExamSubmission> latest,
                                     Map<Integer, Long> attempts) {

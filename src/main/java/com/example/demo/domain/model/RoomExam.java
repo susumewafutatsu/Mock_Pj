@@ -6,13 +6,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * Một đề thi được đính kèm vào một phòng.
- *
- * Bảng nối này chính là thứ thay cho cột {@code Exams.ClassID} cũ. Đề không
- * còn "thuộc về" phòng nào: cùng một đề gắn được vào nhiều phòng, và gỡ khỏi
- * phòng không đụng gì tới đề.
- */
+/** Một đề thi được đính kèm vào một phòng. */
 @Entity
 @Table(name = "RoomExams")
 @Getter

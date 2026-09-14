@@ -1,0 +1,14 @@
+databaseChangeLog:
+  # KHOÁ HỌC → LỘ TRÌNH ÔN TẬP
+
+  - changeSet:
+      id: v1.7.0-02-lesson-min-score
+      author: team
+      comment: "CourseLessons.MinScorePercent: điểm tối thiểu (%) ở bài kiểm tra của chặng để qua chặng"
+      changes:
+        - addColumn:
+            tableName: CourseLessons
+            columns:
+              - column:
+                  name: MinScorePercent
+                  type: INT

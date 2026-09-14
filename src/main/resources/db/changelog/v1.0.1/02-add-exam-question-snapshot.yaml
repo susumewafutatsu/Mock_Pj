@@ -1,16 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # Snapshot câu hỏi theo đề thi.
-  #
-  # Vấn đề: Questions/Answers là dữ liệu "sống" trong ngân hàng câu hỏi.
-  # Nếu giáo viên sửa nội dung hoặc đổi đáp án đúng sau khi học sinh đã
-  # làm bài, SubmissionDetails.IsCorrect và TotalScore đã lưu sẽ không
-  # còn giải thích được bằng dữ liệu hiện tại.
-  #
-  # Cách xử lý: khi câu hỏi được đưa vào đề thi, sao chép nội dung +
-  # toàn bộ đáp án sang bản đóng băng thuộc về đề thi đó. Đề thi đọc
-  # snapshot, ngân hàng câu hỏi tự do sửa.
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.0.1-02-examquestions-snapshot-columns
@@ -127,9 +116,7 @@ databaseChangeLog:
             baseColumnNames: SelectedSnapshotAnswerID
             referencedTableName: ExamQuestionAnswers
             referencedColumnNames: SnapshotAnswerID
-        # SelectedAnswerID giờ chỉ để truy vết. Giáo viên phải được xoá đáp án
-        # trong ngân hàng câu hỏi mà không bị FK của bài đã nộp chặn lại —
-        # nội dung thật của bài nộp đã nằm trong snapshot.
+        # SelectedAnswerID giờ chỉ để truy vết.
         - dropForeignKeyConstraint:
             baseTableName: SubmissionDetails
             constraintName: fk_detail_answer

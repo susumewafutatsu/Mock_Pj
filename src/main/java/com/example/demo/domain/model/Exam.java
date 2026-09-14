@@ -20,14 +20,7 @@ public class Exam {
     @Column(name = "ExamID")
     private Integer examId;
 
-    /**
-     * Đề công khai — ai cũng làm được, không cần vào phòng nào.
-     *
-     * Thay cho quy ước ngầm cũ "ClassID IS NULL nghĩa là đề luyện tập tự do".
-     * Quy ước đó biến mất cùng cột ClassID: quan hệ đề ↔ phòng giờ đi qua
-     * {@link RoomExam}, nên một đề dùng lại được ở nhiều phòng và không còn
-     * "thuộc về" chỗ nào cả.
-     */
+    /** Đề công khai — ai cũng làm được, không cần vào phòng nào. */
     @Column(name = "IsPublic", nullable = false)
     @Builder.Default
     private Boolean isPublic = false;
@@ -59,30 +52,34 @@ public class Exam {
     @Builder.Default
     private Boolean isAdaptive = false;
 
-    /**
-     * Số lượt làm bài tối đa cho mỗi thí sinh. {@code null} = không giới hạn.
-     *
-     * Đề luyện tập tự do thường để null — làm đi làm lại chính là mục đích của
-     * nó. Đề giao trong phòng thi thường để 1, hoặc một con số nhỏ khi người ra đề muốn
-     * thí sinh sửa sai rồi làm lại.
-     *
-     * Việc chặn KHÔNG nằm ở DB: ràng buộc UNIQUE trên ExamSubmissions chỉ chống
-     * hai phiên trùng trong cùng một lượt. Đếm lượt và so với cột này là việc
-     * của tầng service.
-     */
+    /** Số lượt làm bài tối đa cho mỗi thí sinh. */
     @Column(name = "MaxAttempts")
     private Integer maxAttempts;
 
-    /**
-     * Cho thí sinh xem đáp án đúng + giải thích sau khi nộp hay không.
-     *
-     * Bật (mặc định) thì trang xem lại bài hiện đầy đủ; tắt thì thí sinh chỉ
-     * thấy điểm, câu nào đúng câu nào sai và bài làm của chính mình. Người ra đề
-     * tắt khi đó là bài kiểm tra thật, hoặc khi đề còn đang mở cho phòng khác làm.
-     */
+    /** Cho thí sinh xem đáp án đúng + giải thích sau khi nộp hay không. */
     @Column(name = "AllowReview", nullable = false)
     @Builder.Default
     private Boolean allowReview = true;
+
+    /** Chấm theo thang quy đổi JLPT (điểm từng nhóm 0–60/0–120, tổng 0–180, kết luận Đỗ/Trượt) thay vì điểm thô "5/5". */
+    @Column(name = "JlptScoring", nullable = false)
+    @Builder.Default
+    private Boolean jlptScoring = false;
+
+    /** Bài xếp trình độ: kết quả dùng để gợi ý học viên nên bắt đầu từ cấp nào. */
+    @Column(name = "IsPlacement", nullable = false)
+    @Builder.Default
+    private Boolean isPlacement = false;
+
+    /** Xáo thứ tự câu theo từng lượt làm. */
+    @Column(name = "ShuffleQuestions", nullable = false)
+    @Builder.Default
+    private Boolean shuffleQuestions = false;
+
+    /** Xáo thứ tự đáp án theo từng lượt làm — chống chép "câu 3 chọn C". */
+    @Column(name = "ShuffleOptions", nullable = false)
+    @Builder.Default
+    private Boolean shuffleOptions = false;
 
     /** Không giới hạn số lượt làm bài. */
     public boolean isUnlimitedAttempts() {

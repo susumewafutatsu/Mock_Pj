@@ -51,12 +51,7 @@ public class CourseResponse {
     /** Số bài người đang xem đã hoàn thành. */
     private long completedLessons;
 
-    /**
-     * Phần trăm hoàn thành, làm tròn xuống. 0 khi khoá chưa có bài nào.
-     *
-     * Server tính hộ thay vì để client chia: hai bên chia riêng là hai chỗ có
-     * thể chia cho 0 và hai cách làm tròn khác nhau.
-     */
+    /** Phần trăm hoàn thành, làm tròn xuống. */
     private int progressPercent;
 
     /** Người đang xem là tác giả. */

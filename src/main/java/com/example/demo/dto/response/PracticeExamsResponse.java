@@ -6,14 +6,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Trang đề luyện tập tự do.
- *
- * Trả kèm cả bộ lọc lẫn kết quả trong một lần gọi: màn hình này không dùng
- * được nếu chỉ có danh sách đề mà không biết có những trình độ nào để chọn, và
- * tách thành hai request thì client phải tự ghép, tự xử lý trường hợp một bên
- * về trước.
- */
+/** Trang đề luyện tập tự do. */
 @Data
 @Builder
 public class PracticeExamsResponse {
@@ -25,11 +18,7 @@ public class PracticeExamsResponse {
     private Integer appliedLevelId;
     private Integer appliedSubjectId;
 
-    /**
-     * true khi thí sinh không tự chọn gì và server đã chọn hộ một trình độ (lấy
-     * theo phòng em đang tham gia). Client cần biết để hiện "Đang xem theo trình độ của
-     * bạn — xem tất cả" thay vì để thí sinh tưởng đây là toàn bộ đề.
-     */
+    /** true khi thí sinh không tự chọn gì và server đã chọn hộ một trình độ (lấy theo phòng em đang tham gia). */
     private boolean filteredByEnrolledLevels;
 
     /** Đề của TRANG hiện tại, không phải toàn bộ kết quả. */

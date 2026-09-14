@@ -14,18 +14,11 @@ import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserServ
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.Cookie;
 
 import java.util.Collections;
 import java.util.Map;
 
-/**
- * Nhận thông tin user từ Google (userinfo endpoint) rồi tạo mới / cập nhật User trong DB.
- * Được gọi bởi Spring Security trong luồng oauth2Login (xem SecurityConfig).
- */
+/** Nhận thông tin user từ Google (userinfo endpoint) rồi tạo mới / cập nhật User trong DB. */
 @Service
 @RequiredArgsConstructor
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
@@ -51,25 +44,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
         User user = userRepository.findByEmail(email)
                 .map(existing -> linkGoogleAccount(existing, fullName, avatarUrl, externalId))
-                .orElseGet(() -> {
-                    // Mặc định là STUDENT, lấy từ cookie nếu có
-                    Role defaultRole = Role.STUDENT;
-                    ServletRequestAttributes attributesRequest = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                    if (attributesRequest != null) {
-                        HttpServletRequest request = attributesRequest.getRequest();
-                        defaultRole = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.OAUTH2_ROLE_PARAM_COOKIE_NAME)
-                                .map(Cookie::getValue)
-                                .map(val -> {
-                                    try {
-                                        return Role.valueOf(val.toUpperCase());
-                                    } catch (IllegalArgumentException e) {
-                                        return Role.STUDENT;
-                                    }
-                                })
-                                .orElse(Role.STUDENT);
-                    }
-                    return createGoogleUser(email, fullName, avatarUrl, externalId, defaultRole);
-                });
+                // Tài khoản mới qua Google cũng LUÔN là học viên.
+                .orElseGet(() -> createGoogleUser(email, fullName, avatarUrl, externalId));
+        // Không thì tài khoản bị khoá chỉ cần bấm "Đăng nhập bằng Google" là vào lại được.
+        if (user.isLocked()) {
+            throw new OAuth2AuthenticationException(
+                    new OAuth2Error("account_locked"),
+                    "Tài khoản đã bị quản trị viên khoá");
+        }
         user = userRepository.save(user);
 
         // Authority dùng đúng format "ROLE_x" như CustomUserDetailsService để phân quyền nhất quán
@@ -79,10 +61,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 "email");
     }
 
-    /**
-     * Email đã tồn tại: liên kết thêm thông tin Google, giữ nguyên role và authProvider gốc
-     * (user đăng ký LOCAL vẫn đăng nhập được bằng mật khẩu).
-     */
+    /** Email đã tồn tại: liên kết thêm thông tin Google. */
     private User linkGoogleAccount(User user, String fullName, String avatarUrl, String externalId) {
         if (user.getExternalId() == null) {
             user.setExternalId(externalId);
@@ -99,15 +78,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         return user;
     }
 
-    /** Lần đầu đăng nhập bằng Google: tạo user mới với role lấy từ cookie hoặc mặc định STUDENT. */
-    private User createGoogleUser(String email, String fullName, String avatarUrl, String externalId, Role role) {
+    /** Lần đầu đăng nhập bằng Google: tạo tài khoản học viên. */
+    private User createGoogleUser(String email, String fullName, String avatarUrl, String externalId) {
         return User.builder()
                 .email(email)
                 .fullName(fullName)
                 .avatarUrl(avatarUrl)
                 .externalId(externalId)
                 .authProvider(AuthProvider.GOOGLE)
-                .role(role)
+                .role(Role.STUDENT)
                 .build();
     }
 }

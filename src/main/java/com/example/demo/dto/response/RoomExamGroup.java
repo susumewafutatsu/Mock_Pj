@@ -7,11 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * Đề thi của một phòng, đã nhóm sẵn cho trang chủ thí sinh.
- *
- * Thay cho ClassExamGroup cũ.
- */
+/** Đề thi của một phòng, đã nhóm sẵn cho trang chủ thí sinh. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -30,6 +26,13 @@ public class RoomExamGroup {
 
     /** Số đề trong phòng này thí sinh còn phải làm. */
     private int pendingCount;
+
+    /** Sảnh chờ / đang thi / đã kết thúc — xem RoomPhase. */
+    private com.example.demo.domain.enums.RoomPhase phase;
+
+    private java.time.LocalDateTime startTime;
+
+    private java.time.LocalDateTime endTime;
 
     private List<ExamResponse> exams;
 }

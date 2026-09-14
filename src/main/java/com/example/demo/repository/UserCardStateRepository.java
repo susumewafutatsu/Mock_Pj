@@ -2,7 +2,9 @@ package com.example.demo.repository;
 
 import com.example.demo.domain.enums.StudyItemType;
 import com.example.demo.domain.model.UserCardState;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,16 +17,14 @@ import java.util.Optional;
 @Repository
 public interface UserCardStateRepository extends JpaRepository<UserCardState, Integer> {
 
+    /** Lọc theo bộ khi :deckId khác null. */
+    String IN_DECK = " (:deckId IS NULL OR EXISTS (SELECT 1 FROM DeckItem di WHERE di.id.deckId = :deckId"
+            + " AND di.id.itemType = cs.itemType AND di.id.itemId = cs.itemId)) ";
+
     Optional<UserCardState> findByUser_UserIdAndItemTypeAndItemId(
             String userId, StudyItemType itemType, Integer itemId);
 
-    /**
-     * Những thẻ đã ghi danh trong một nhóm thẻ cho trước.
-     *
-     * Dùng lúc ghi danh bộ thẻ để biết thẻ nào đã học rồi mà bỏ qua — người
-     * học bộ "Bài 1" rồi mới học bộ "Tổng hợp" có chung mấy thẻ thì tiến độ
-     * cũ phải được giữ nguyên, không bị đặt lại về thẻ mới.
-     */
+    /** Những thẻ đã có trong lịch trong một nhóm thẻ cho trước. */
     @Query("""
             SELECT cs FROM UserCardState cs
             WHERE cs.user.userId = :userId
@@ -35,56 +35,109 @@ public interface UserCardStateRepository extends JpaRepository<UserCardState, In
                                      @Param("itemType") StudyItemType itemType,
                                      @Param("itemIds") Collection<Integer> itemIds);
 
-    /**
-     * Hàng đợi ôn hôm nay: thẻ đã tới hạn, thẻ quá hạn lâu nhất lên trước.
-     *
-     * Giới hạn số lượng do tầng service đặt qua Pageable — ôn dồn 500 thẻ một
-     * ngày là cách nhanh nhất khiến người học bỏ cuộc.
-     */
-    @Query("""
-            SELECT cs FROM UserCardState cs
-            WHERE cs.user.userId = :userId
-              AND cs.dueAt <= :now
-            ORDER BY cs.dueAt ASC
-            """)
-    List<UserCardState> findDue(@Param("userId") String userId,
-                                @Param("now") LocalDateTime now,
-                                org.springframework.data.domain.Pageable pageable);
+    /** Thẻ ôn đến hạn (đã từng học), quá hạn lâu nhất trước. */
+    @Query("SELECT cs FROM UserCardState cs WHERE cs.user.userId = :userId"
+            + " AND cs.firstReviewedAt IS NOT NULL AND cs.dueAt <= :now AND" + IN_DECK
+            + "ORDER BY cs.dueAt ASC")
+    List<UserCardState> findDueReviews(@Param("userId") String userId,
+                                       @Param("now") LocalDateTime now,
+                                       @Param("deckId") Integer deckId,
+                                       Pageable pageable);
 
+    @Query("SELECT COUNT(cs) FROM UserCardState cs WHERE cs.user.userId = :userId"
+            + " AND cs.firstReviewedAt IS NOT NULL AND cs.dueAt <= :now AND" + IN_DECK)
+    long countDueReviews(@Param("userId") String userId,
+                         @Param("now") LocalDateTime now,
+                         @Param("deckId") Integer deckId);
+
+    /** Thẻ mới chưa học, theo thứ tự thêm vào lịch. */
+    @Query("SELECT cs FROM UserCardState cs WHERE cs.user.userId = :userId"
+            + " AND cs.firstReviewedAt IS NULL AND" + IN_DECK + "ORDER BY cs.cardStateId ASC")
+    List<UserCardState> findNewCards(@Param("userId") String userId,
+                                     @Param("deckId") Integer deckId,
+                                     Pageable pageable);
+
+    @Query("SELECT COUNT(cs) FROM UserCardState cs WHERE cs.user.userId = :userId"
+            + " AND cs.firstReviewedAt IS NULL AND" + IN_DECK)
+    long countNewCards(@Param("userId") String userId, @Param("deckId") Integer deckId);
+
+    /** Số thẻ mới đã học từ một mốc (thường là đầu ngày). */
     @Query("""
             SELECT COUNT(cs) FROM UserCardState cs
-            WHERE cs.user.userId = :userId AND cs.dueAt <= :now
+            WHERE cs.user.userId = :userId AND cs.firstReviewedAt >= :since
             """)
-    long countDue(@Param("userId") String userId, @Param("now") LocalDateTime now);
+    long countStudiedSince(@Param("userId") String userId, @Param("since") LocalDateTime since);
 
     long countByUser_UserId(String userId);
 
-    /** Số thẻ đã vào trí nhớ dài hạn (khoảng cách ôn từ 21 ngày trở lên). */
+    /** Số thẻ đã thuộc (khoảng cách ôn từ 21 ngày). */
     @Query("""
             SELECT COUNT(cs) FROM UserCardState cs
             WHERE cs.user.userId = :userId AND cs.intervalDays >= :matureDays
             """)
     long countMature(@Param("userId") String userId, @Param("matureDays") int matureDays);
 
-    /**
-     * Tiến độ của từng bộ thẻ trong một lần truy vấn: đã ghi danh bao nhiêu
-     * thẻ và thuộc được bao nhiêu.
-     *
-     * @return từng dòng là [deckId, số thẻ đã ghi danh, số thẻ đã thuộc]
-     */
+    /** Tiến độ từng bộ: [deckId, thẻ trong lịch, đã thuộc, cần ôn, thẻ mới]. */
     @Query("""
-            SELECT di.deck.deckId,
+            SELECT di.id.deckId,
                    COUNT(cs),
-                   SUM(CASE WHEN cs.intervalDays >= :matureDays THEN 1 ELSE 0 END)
+                   SUM(CASE WHEN cs.intervalDays >= :matureDays THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN cs.firstReviewedAt IS NOT NULL AND cs.dueAt <= :now THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN cs.firstReviewedAt IS NULL THEN 1 ELSE 0 END)
             FROM DeckItem di
             JOIN UserCardState cs
               ON cs.itemType = di.id.itemType
              AND cs.itemId = di.id.itemId
              AND cs.user.userId = :userId
-            WHERE di.deck.deckId IN :deckIds
-            GROUP BY di.deck.deckId
+            WHERE di.id.deckId IN :deckIds
+            GROUP BY di.id.deckId
             """)
     List<Object[]> findDeckProgress(@Param("userId") String userId,
                                     @Param("deckIds") Collection<Integer> deckIds,
-                                    @Param("matureDays") int matureDays);
+                                    @Param("matureDays") int matureDays,
+                                    @Param("now") LocalDateTime now);
+
+    /** Trạng thái của người học trên các thẻ của một bộ. */
+    @Query("""
+            SELECT cs FROM UserCardState cs, DeckItem di
+            WHERE di.id.deckId = :deckId
+              AND cs.itemType = di.id.itemType
+              AND cs.itemId = di.id.itemId
+              AND cs.user.userId = :userId
+            """)
+    List<UserCardState> findInDeck(@Param("userId") String userId, @Param("deckId") Integer deckId);
+
+    @Modifying
+    @Query("DELETE FROM UserCardState cs WHERE cs.user.userId = :userId AND cs.itemType = :itemType AND cs.itemId = :itemId")
+    int deleteForUser(@Param("userId") String userId,
+                      @Param("itemType") StudyItemType itemType,
+                      @Param("itemId") Integer itemId);
+
+    @Modifying
+    @Query("DELETE FROM UserCardState cs WHERE cs.itemType = :itemType AND cs.itemId = :itemId")
+    int deleteForItem(@Param("itemType") StudyItemType itemType, @Param("itemId") Integer itemId);
+
+    /** [userId, thẻ ôn đến hạn] cho job nhắc ôn. */
+    @Query("""
+            SELECT cs.user.userId, COUNT(cs) FROM UserCardState cs
+            WHERE cs.firstReviewedAt IS NOT NULL AND cs.dueAt <= :now
+            GROUP BY cs.user.userId
+            """)
+    List<Object[]> countDueReviewsByUser(@Param("now") LocalDateTime now);
+
+    /** [userId, thẻ mới chưa học]. */
+    @Query("""
+            SELECT cs.user.userId, COUNT(cs) FROM UserCardState cs
+            WHERE cs.firstReviewedAt IS NULL
+            GROUP BY cs.user.userId
+            """)
+    List<Object[]> countNewByUser();
+
+    /** [userId, thẻ mới đã học từ mốc]. */
+    @Query("""
+            SELECT cs.user.userId, COUNT(cs) FROM UserCardState cs
+            WHERE cs.firstReviewedAt >= :since
+            GROUP BY cs.user.userId
+            """)
+    List<Object[]> countStudiedSinceByUser(@Param("since") LocalDateTime since);
 }

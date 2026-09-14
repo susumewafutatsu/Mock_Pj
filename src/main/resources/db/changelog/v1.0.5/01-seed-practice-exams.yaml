@@ -1,22 +1,5 @@
 databaseChangeLog:
-  # ─────────────────────────────────────────────────────────────────
   # DỮ LIỆU ĐỂ TEST MÀN HÌNH CHỌN ĐỀ — context "demo", không chạy mặc định.
-  #
-  # Vì sao cần thêm file này: v1.0.3 chỉ có ĐÚNG MỘT đề tự do (ExamID 9002)
-  # ở đúng một trình độ. Với ngần đó dữ liệu thì hai thứ vừa làm không thể
-  # nhìn thấy được:
-  #   - Bộ lọc trình độ chỉ hiện một ô, không có gì để chọn.
-  #   - Thanh phân trang không xuất hiện (chỉ hiện khi có từ 2 trang).
-  # File này seed đủ đề để cả hai lộ ra ngay ở màn hình đầu tiên.
-  #
-  # Cũng thêm một lớp thứ hai, để trang chủ có nhiều hơn một nhóm lớp —
-  # nếu chỉ có một lớp thì việc "nhóm theo lớp" nhìn không khác gì danh
-  # sách phẳng cũ.
-  #
-  # ID trong dải 9101+ (dải 9001-9099 đã thuộc v1.0.3) nên hai file không đụng nhau.
-  #
-  # Nạp bằng: mvnw spring-boot:run -Dspring-boot.run.arguments=--spring.liquibase.contexts=demo
-  # ─────────────────────────────────────────────────────────────────
 
   - changeSet:
       id: v1.0.5-01-seed-practice-levels
@@ -74,11 +57,6 @@ databaseChangeLog:
             expectedResult: 1
             sql: SELECT COUNT(*) FROM Users WHERE UserID = 'demo-student-01'
         # Kiểm tra ID còn trống trước khi chèn.
-        #
-        # Bài học từ lần chạy đầu: ID cứng 9002 trùng với một lớp có sẵn trên DB
-        # dev, và Liquibase làm app CHẾT LÚC KHỞI ĐỘNG chứ không chỉ bỏ qua seed.
-        # Dữ liệu mẫu mà chặn cả việc chạy app thì tệ hơn là không có dữ liệu mẫu,
-        # nên mọi changeSet ở dưới đều tự kiểm ID trống trước.
         - sqlCheck:
             expectedResult: 0
             sql: SELECT COUNT(*) FROM Classes WHERE ClassID = 9101

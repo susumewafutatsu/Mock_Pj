@@ -39,13 +39,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Cài đặt sổ tay câu sai.
- *
- * Nguyên tắc xuyên suốt: đáp án đúng và lời giải chỉ rời khỏi server SAU khi
- * người học đã chọn xong. Danh sách sổ tay có trả về các lựa chọn nhưng không
- * kèm cờ đúng/sai, giống hệt cách phòng thi đối xử với đề.
- */
+/** Cài đặt sổ tay câu sai. */
 @Service
 @RequiredArgsConstructor
 public class MistakeBookServiceImpl implements MistakeBookService {
@@ -66,9 +60,7 @@ public class MistakeBookServiceImpl implements MistakeBookService {
         if (student == null || wrongQuestionIds == null || wrongQuestionIds.isEmpty()) {
             return 0;
         }
-        // Bỏ trùng trước khi truy vấn: một đề về lý thuyết không lặp câu hỏi,
-        // nhưng dữ liệu cũ có thể có, và một mục trùng ở đây sẽ làm WrongCount
-        // nhảy hai bậc chỉ vì một lần sai.
+        // Bỏ trùng trước khi truy vấn: một đề về lý thuyết không lặp câu hỏi, nhưng dữ liệu cũ có thể có.
         Set<Integer> questionIds = wrongQuestionIds.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -76,8 +68,7 @@ public class MistakeBookServiceImpl implements MistakeBookService {
             return 0;
         }
 
-        // Một truy vấn cho cả đề thay vì mỗi câu một lượt — đoạn này chạy bên
-        // trong transaction nộp bài, đúng lúc cả phòng cùng bấm nộp.
+        // Một truy vấn cho cả đề thay vì mỗi câu một lượt.
         Map<Integer, MistakeEntry> existing = mistakeRepository
                 .findByUser_UserIdAndQuestion_QuestionIdIn(student.getUserId(), questionIds)
                 .stream()
@@ -143,9 +134,7 @@ public class MistakeBookServiceImpl implements MistakeBookService {
         User student = requireStudent(studentEmail);
         LocalDateTime now = DbTime.now();
 
-        // Tra theo cặp (người, câu hỏi) chứ không tra theo mistakeId: người
-        // dùng không thể chạm tới mục trong sổ tay của người khác, kể cả khi
-        // đoán đúng số ID.
+        // Tra theo cặp (người, câu hỏi) chứ không tra theo mistakeId.
         MistakeEntry entry = mistakeRepository
                 .findByUser_UserIdAndQuestion_QuestionId(student.getUserId(), questionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -159,8 +148,7 @@ public class MistakeBookServiceImpl implements MistakeBookService {
         Integer correctAnswerId = null;
 
         if (type == QuestionType.ESSAY) {
-            // Không có đáp án để máy so. Người học tự chấm — đây là ôn tập cá
-            // nhân, không tính điểm, nên tự đánh giá không gây hại cho ai.
+            // Không có đáp án để máy so.
             correct = Boolean.TRUE.equals(request == null ? null : request.getSelfCorrect());
         } else {
             Integer selectedId = request == null ? null : request.getSelectedAnswerId();
@@ -168,8 +156,7 @@ public class MistakeBookServiceImpl implements MistakeBookService {
                 throw new BusinessException("Chưa chọn đáp án");
             }
             List<Answer> answers = answerRepository.findByQuestion_QuestionId(questionId);
-            // Lựa chọn phải thuộc đúng câu hỏi này. Thiếu bước kiểm tra này thì
-            // gửi lên một AnswerID đúng của câu khác là luôn được chấm đúng.
+            // Lựa chọn phải thuộc đúng câu hỏi này.
             Answer selected = answers.stream()
                     .filter(a -> a.getAnswerId().equals(selectedId))
                     .findFirst()

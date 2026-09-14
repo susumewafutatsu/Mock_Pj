@@ -1,17 +1,12 @@
 package com.example.demo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/**
- * Một dòng trong danh sách đề thi của người ra đề.
- *
- * Khác {@link ExamResponse} (phía thí sinh): ở đây không có trạng thái riêng
- * của từng thí sinh, thay vào đó là số liệu quản lý — đã gắn bao nhiêu câu, bao
- * nhiêu người đã nộp trên tổng số thí sinh trong các phòng chứa đề.
- */
+/** Một dòng trong danh sách đề thi của người ra đề. */
 @Data
 @Builder
 public class TeacherExamResponse {
@@ -42,14 +37,20 @@ public class TeacherExamResponse {
     private boolean allowReview;
 
     /** Đề công khai — mọi thí sinh làm được, không cần vào phòng nào. */
+    @JsonProperty("isPublic")
     private boolean isPublic;
 
-    /**
-     * Đề này đang được gắn vào bao nhiêu phòng.
-     *
-     * Thay cho cặp {@code classId}/{@code className} cũ: một đề giờ dùng lại
-     * được ở nhiều phòng, nên một cái tên lớp duy nhất không còn diễn tả nổi.
-     */
+    /** Cùng lý do với isPublic: ghi rõ tên JSON để Jackson không bỏ tiền tố "is". */
+    @JsonProperty("isPlacement")
+    private boolean isPlacement;
+
+    private boolean shuffleQuestions;
+    private boolean shuffleOptions;
+
+    /** Đề đang chấm theo thang quy đổi JLPT (đã áp cấu trúc phần thi chuẩn). */
+    private boolean jlptScoring;
+
+    /** Đề này đang được gắn vào bao nhiêu phòng. */
     private long roomCount;
 
     private Integer levelId;

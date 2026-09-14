@@ -1,23 +1,17 @@
 package com.example.demo.dto.response;
 
+import com.example.demo.domain.enums.ReviewGrade;
 import com.example.demo.domain.enums.StudyItemType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
-/**
- * Một thẻ trong phiên ôn tập.
- *
- * Một DTO dùng cho cả từ vựng lẫn chữ Hán, thay vì hai kiểu riêng: màn ôn thẻ
- * lật hết thẻ này tới thẻ khác trong cùng một hàng đợi trộn lẫn, nên hai kiểu
- * dữ liệu sẽ buộc client phải rẽ nhánh ở mọi chỗ. Trường nào không thuộc loại
- * thẻ hiện tại thì để null — {@link #itemType} cho biết phải đọc trường nào.
- *
- * {@link #prompt} là mặt trước của thẻ (chữ cần nhớ), phần còn lại là mặt sau.
- */
+/** Một thẻ trong phiên ôn tập. */
 @Data
 @Builder
 @NoArgsConstructor
@@ -49,9 +43,17 @@ public class ReviewCardResponse {
     private String radical;
     private String mnemonic;
 
-    // ── Trạng thái ôn tập, để màn hình nói được "thẻ mới" hay "ôn lại" ──
+    // ── Riêng thẻ tự soạn ───────────────────────────────────────────────
+    private String note;
+
+    // ── Trạng thái ôn tập ───────────────────────────────────────────────
+    /** Giữ tên JSON "isNew". */
+    @JsonProperty("isNew")
     private boolean isNew;
     private Integer repetitions;
     private Integer intervalDays;
     private LocalDateTime dueAt;
+
+    /** Số ngày sẽ gặp lại nếu chọn từng mức. */
+    private Map<ReviewGrade, Integer> nextIntervals;
 }

@@ -1,8 +1,12 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.dto.response.AudioPlayResponse;
+import com.example.demo.service.PaperShuffler;
 import com.example.demo.domain.enums.QuestionType;
 import com.example.demo.domain.enums.Role;
+import com.example.demo.domain.enums.RoomPhase;
 import com.example.demo.domain.enums.SubmissionStatus;
+import com.example.demo.domain.model.Room;
 
 import com.example.demo.domain.model.Exam;
 import com.example.demo.domain.model.ExamQuestion;
@@ -11,8 +15,10 @@ import com.example.demo.domain.model.ExamSubmission;
 import com.example.demo.domain.model.SubmissionDetail;
 import com.example.demo.domain.model.User;
 import com.example.demo.dto.request.SaveAnswerRequest;
+import com.example.demo.dto.request.SaveAnswersBatchRequest;
 import com.example.demo.dto.request.SubmitExamRequest;
 import com.example.demo.dto.response.AnswerSavedResponse;
+import com.example.demo.dto.response.AnswersBatchSavedResponse;
 import com.example.demo.dto.response.ExamOptionView;
 import com.example.demo.dto.response.ExamQuestionView;
 import com.example.demo.dto.response.ExamResultResponse;
@@ -29,6 +35,9 @@ import com.example.demo.repository.ExamRepository;
 import com.example.demo.repository.ExamSubmissionRepository;
 import com.example.demo.repository.SubmissionDetailRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.ExamSectionRepository;
+import com.example.demo.service.ExamSectionTiming;
+import com.example.demo.service.JlptScoringService;
 import com.example.demo.service.MistakeBookService;
 import com.example.demo.service.SubmissionService;
 import com.example.demo.service.cache.ExamRedisService;
@@ -41,11 +50,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -57,29 +61,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Cài đặt vòng đời phiên làm bài.
- *
- * Ghi chú về {@code noRollbackFor = BusinessException.class}: mấy chỗ phát hiện
- * "đã hết giờ" sẽ nộp bài tự động rồi mới ném BusinessException để client biết
- * mà chuyển trang. Nếu để exception đó rollback thì việc nộp bài vừa làm cũng
- * bị hoàn tác, thí sinh gọi lại lần nữa lại rơi vào đúng nhánh đó — nên các
- * method này khai báo không rollback với BusinessException. Mọi BusinessException
- * trong lớp này đều được ném ở vị trí không có thay đổi nào cần huỷ.
- *
- * Ghi chú về Redis ({@link ExamRedisService}): MySQL vẫn là nguồn sự thật duy
- * nhất của phiên thi. Redis chỉ gánh ba việc mà DB làm thì tốn kém:
- *
- *   - Cache đề thi đã snapshot, để mỗi lần vào phòng thi không phải dựng lại
- *     danh sách câu hỏi + lựa chọn bằng hàng chục query.
- *   - Khoá hẹp theo (đề, thí sinh) lúc tạo phiên, thay cho khoá dòng đề thi vốn
- *     bắt cả lớp xếp hàng đúng lúc vào thi.
- *   - Nhịp sống (presence) của thí sinh, để heartbeat 15 giây một lần không biến
- *     thành một UPDATE xuống DB mỗi lần.
- *
- * Mất Redis không làm hỏng bài thi: mọi lối gọi đều có đường lui về MySQL, đúng
- * bằng hành vi trước khi có Redis — chỉ chậm hơn.
- */
+/** Cài đặt vòng đời phiên làm bài. */
 @Service
 @RequiredArgsConstructor
 public class SubmissionServiceImpl implements SubmissionService {
@@ -97,12 +79,10 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final UserRepository userRepository;
     private final ExamRedisService examRedis;
     private final MistakeBookService mistakeBookService;
+    private final JlptScoringService jlptScoringService;
+    private final ExamSectionRepository examSectionRepository;
 
-    /**
-     * Ngưỡng im lặng coi là mất kết nối — cũng chính là TTL của key nhịp sống
-     * trong Redis. Dùng chung một giá trị với {@code ExamSessionScheduler} để
-     * key hết hạn đúng lúc job đi quét, không lệch nhau.
-     */
+    /** Ngưỡng im lặng coi là mất kết nối — cũng chính là TTL của key nhịp sống trong Redis. */
     @Value("${exam.session.at-risk-after-seconds:90}")
     private long atRiskAfterSeconds;
 
@@ -114,10 +94,9 @@ public class SubmissionServiceImpl implements SubmissionService {
         User student = requireStudent(studentEmail);
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
-        requireCanTakeExam(exam, student);
+        ExamGate gate = requireCanTakeExam(exam, student);
 
-        // Nhánh nhanh: lượt gần nhất còn dở thì đây là "vào lại phòng thi",
-        // không khoá gì. Lượt gần nhất đã nộp thì rơi xuống nhánh mở lượt mới.
+        // Nhánh nhanh: lượt gần nhất còn dở thì đây là "vào lại phòng thi", không khoá gì.
         Optional<ExamSubmission> latest = submissionRepository
                 .findFirstByExam_ExamIdAndStudent_UserIdOrderByAttemptNumberDesc(
                         examId, student.getUserId());
@@ -125,17 +104,15 @@ public class SubmissionServiceImpl implements SubmissionService {
             return resumeExisting(exam, latest.get());
         }
 
+        // Đề trong phòng: phòng chưa bắt đầu / đã hết giờ thì không mở lượt mới.
+        if (gate.notStartedReason() != null) {
+            throw new BusinessException(gate.notStartedReason());
+        }
         requireExamWindowOpen(exam);
-        // Kiểm sớm để thí sinh hết lượt không phải chờ giành khoá; kiểm lại lần
-        // nữa sau khi có khoá vì con số này có thể đổi giữa hai request song song.
+        // Kiểm sớm để thí sinh hết lượt không phải chờ giành khoá.
         requireAttemptAvailable(exam, student);
 
-        // Nhánh tạo mới cần chống hai request song song của cùng một em (double
-        // click, hai tab) cùng thấy "chưa có phiên" rồi cùng insert.
-        //
-        // Khoá Redis hẹp theo (đề, thí sinh) nên cả lớp bấm "Bắt đầu" cùng lúc
-        // vẫn chạy song song. Chỉ khi Redis không dùng được mới quay về khoá
-        // dòng đề thi dưới DB — đúng hành vi cũ, chậm nhưng vẫn an toàn.
+        // Nhánh tạo mới cần chống hai request song song của cùng một em (double click, hai tab) cùng thấy "chưa có phiên" rồi cùng insert.
         LockState lock = examRedis.acquireStartLock(examId, student.getUserId());
         if (lock == LockState.BUSY) {
             throw new BusinessException("Yêu cầu vào phòng thi trước đó đang được xử lý, "
@@ -148,10 +125,6 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (lock == LockState.ACQUIRED) {
             releaseStartLockAfterCommit(examId, student.getUserId());
         }
-        // Nhánh tạo mới: khoá dòng đề thi để hai request song song (double-click,
-        // hai tab) không cùng lúc thấy "chưa có phiên" rồi cùng insert.
-        examRepository.findByIdForUpdate(examId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
 
         Optional<ExamSubmission> afterLock = submissionRepository
                 .findFirstByExam_ExamIdAndStudent_UserIdOrderByAttemptNumberDesc(
@@ -164,24 +137,27 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new BusinessException("Đề thi chưa có câu hỏi nào, chưa thể bắt đầu");
         }
 
-        // Đếm lại trong khoá: đây mới là con số quyết định. Số lượt đã dùng cũng
-        // chính là số thứ tự của lượt sắp mở (đã dùng 2 -> đang mở lượt 3).
+        // Đếm lại trong khoá: đây mới là con số quyết định.
         long used = requireAttemptAvailable(exam, student);
 
         LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expiresAt = computeExpiry(exam, now);
+        // Thi trong phòng: bài không được kéo dài quá giờ kết thúc của phòng.
+        if (gate.runningRoomEnd() != null && gate.runningRoomEnd().isBefore(expiresAt)) {
+            expiresAt = gate.runningRoomEnd();
+        }
         ExamSubmission session = ExamSubmission.builder()
                 .exam(exam)
                 .student(student)
                 .attemptNumber((int) used + 1)
                 .startedAt(now)
-                .expiresAt(computeExpiry(exam, now))
+                .expiresAt(expiresAt)
                 .lastActiveAt(now)
                 .status(SubmissionStatus.IN_PROGRESS)
                 .build();
         submissionRepository.save(session);
 
-        // Mở nhịp sống ngay từ lúc vào phòng, đừng đợi heartbeat đầu tiên: nếu
-        // không, phiên vừa tạo đã bị job quét coi là mất kết nối.
+        // Mở nhịp sống ngay từ lúc vào phòng, đừng đợi heartbeat đầu tiên.
         examRedis.touchAlive(session.getSubmissionId(), atRiskAfterSeconds);
 
         log.info("Bắt đầu phiên thi submissionId={} examId={} studentId={} lượt={}/{} expiresAt={}",
@@ -190,19 +166,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         return toSessionResponse(exam, session, false);
     }
 
-    /**
-     * Trả khoá tạo phiên, nhưng chỉ SAU khi transaction kết thúc.
-     *
-     * Trả ngay trong thân method là sai: lúc đó dòng ExamSubmissions vừa insert
-     * chưa commit, nên request thứ hai giành được khoá sẽ KHÔNG thấy nó và
-     * insert thêm một phiên nữa. Điều này đúng với mọi mức cô lập trừ READ
-     * UNCOMMITTED — dự án không cấu hình đè nên đang chạy mặc định của InnoDB
-     * là REPEATABLE READ. Đợi tới afterCompletion thì request sau chắc chắn đọc
-     * được phiên vừa tạo và đi nhánh "vào lại phòng".
-     *
-     * Trả cả khi transaction rollback — khi đó không có phiên nào được tạo nên
-     * thí sinh phải được thử lại ngay, không phải chờ hết TTL.
-     */
+    /** Trả khoá tạo phiên, nhưng chỉ SAU khi transaction kết thúc. */
     private void releaseStartLockAfterCommit(Integer examId, String studentId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             examRedis.releaseStartLock(examId, studentId);
@@ -224,16 +188,10 @@ public class SubmissionServiceImpl implements SubmissionService {
         return resumeExisting(session.getExam(), session);
     }
 
-    /**
-     * Vào lại một phiên đã tồn tại. Đây là điểm hội tụ của hai luồng "bắt đầu
-     * thi" và "khôi phục sau khi mất mạng" — cả hai đều đi qua đây nên client
-     * chỉ cần một cách xử lý.
-     */
+    /** Vào lại một phiên đã tồn tại. */
     private ExamSessionResponse resumeExisting(Exam exam, ExamSubmission session) {
         if (!session.isInProgress()) {
-            // Chỉ tới được đây qua GET /session — luồng start đã lọc trước và đi
-            // nhánh mở lượt mới. Ở đây là "đọc lại phiên đang dở" mà phiên đó
-            // vừa bị chốt (hết giờ, hoặc nộp từ một tab khác).
+            // Chỉ tới được đây qua GET /session — luồng start đã lọc trước và đi nhánh mở lượt mới.
             throw new BusinessException("Lượt làm thứ " + session.getAttemptNumber()
                     + " đã được nộp lúc " + session.getSubmittedAt()
                     + ". Gọi lại /start nếu bạn còn lượt làm.");
@@ -250,15 +208,10 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         // Quay lại được tính là còn sống -> tắt cờ nghi rớt mạng.
         markAlive(session, now);
-        session.setLastActiveAt(now);
-        session.setAtRiskStatus(false);
         return toSessionResponse(exam, session, true);
     }
 
-    /**
-     * Deadline của phiên, chốt một lần và không đổi về sau.
-     * Lấy mốc sớm hơn giữa "đủ số phút làm bài" và "giờ đóng đề".
-     */
+    /** Deadline của phiên, chốt một lần và không đổi về sau. */
     private LocalDateTime computeExpiry(Exam exam, LocalDateTime startedAt) {
         LocalDateTime byDuration = startedAt.plusMinutes(exam.getDurationMinutes());
         if (exam.getEndTime() != null && exam.getEndTime().isBefore(byDuration)) {
@@ -267,13 +220,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         return byDuration;
     }
 
-    /**
-     * Thí sinh còn lượt làm bài trên đề này không.
-     *
-     * @return số lượt đã dùng — người gọi dùng luôn con số này làm số thứ tự
-     *         cho lượt sắp mở, khỏi đếm lại lần nữa
-     * @throws BusinessException nếu đã dùng hết số lượt người ra đề cho phép
-     */
+    /** Thí sinh còn lượt làm bài trên đề này không. */
     private long requireAttemptAvailable(Exam exam, User student) {
         long used = submissionRepository.countByExam_ExamIdAndStudent_UserId(
                 exam.getExamId(), student.getUserId());
@@ -306,8 +253,6 @@ public class SubmissionServiceImpl implements SubmissionService {
         SubmissionDetail detail = upsertAnswer(examId, session, request, now);
 
         markAlive(session, now);
-        session.setLastActiveAt(now);
-        session.setAtRiskStatus(false);
 
         return AnswerSavedResponse.builder()
                 .submissionId(session.getSubmissionId())
@@ -320,31 +265,97 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .build();
     }
 
-    /**
-     * Ghi đáp án của một câu theo kiểu upsert trên (SubmissionID, QuestionID).
-     *
-     * Đây là chỗ giải quyết chuyện mất tiến độ: thí sinh vừa bấm chọn là dữ liệu
-     * đã nằm trong DB, không đợi tới lúc nộp bài. Gọi lại nhiều lần cho cùng một
-     * câu chỉ ghi đè dòng cũ.
-     *
-     * Cố tình KHÔNG chấm điểm ở đây — IsCorrect/ScoreEarned chỉ được tính lúc
-     * chốt bài, để không có đường nào suy ra đáp án đúng khi đang làm bài.
-     */
+    @Override
+    @Transactional(noRollbackFor = BusinessException.class)
+    public AnswersBatchSavedResponse saveAnswers(Integer examId, SaveAnswersBatchRequest request,
+                                                 String studentEmail) {
+        User student = requireStudent(studentEmail);
+        ExamSubmission session = requireSession(examId, student);
+        if (request.getSubmissionId() != null
+                && !request.getSubmissionId().equals(session.getSubmissionId())) {
+            throw new BusinessException("Lô đáp án thuộc lượt làm id=" + request.getSubmissionId()
+                    + ", lượt đó đã đóng. Không ghi vào lượt hiện tại.");
+        }
+        LocalDateTime now = requireActiveSession(session);
+
+        // Gom theo câu trước khi ghi: client có thể gửi cùng một câu hai lần (thí sinh đổi ý giữa hai nhịp gửi)
+        Map<Integer, SaveAnswerRequest> latest = new LinkedHashMap<>();
+        for (SaveAnswerRequest answer : request.getAnswers()) {
+            latest.put(answer.getQuestionId(), answer);
+        }
+
+        // Kiểm hết cả lô rồi mới ghi câu nào.
+        ExamSectionTiming timing = timingOf(examId, session);
+        List<ResolvedAnswer> resolved = new ArrayList<>(latest.size());
+        for (SaveAnswerRequest answer : latest.values()) {
+            resolved.add(resolveAnswer(examId, answer, timing, now));
+        }
+        for (ResolvedAnswer answer : resolved) {
+            writeAnswer(session, answer, now);
+        }
+
+        markAlive(session, now);
+
+        return AnswersBatchSavedResponse.builder()
+                .submissionId(session.getSubmissionId())
+                .savedQuestionIds(new ArrayList<>(latest.keySet()))
+                .answeredAt(now)
+                .serverTime(now)
+                .expiresAt(session.getExpiresAt())
+                .remainingSeconds(session.remainingSeconds(now))
+                .answeredQuestions(countAnswered(session))
+                .build();
+    }
+
+    /** Ghi đáp án của một câu theo kiểu upsert trên (SubmissionID, QuestionID). */
     private SubmissionDetail upsertAnswer(Integer examId, ExamSubmission session,
                                           SaveAnswerRequest request, LocalDateTime now) {
+        return writeAnswer(session, resolveAnswer(examId, request, timingOf(examId, session), now), now);
+    }
+
+    /** Lịch chạy các phần của một phiên. */
+    private ExamSectionTiming timingOf(Integer examId, ExamSubmission session) {
+        return new ExamSectionTiming(session.getStartedAt(),
+                examSectionRepository.findByExam_ExamIdOrderByOrderNoAsc(examId));
+    }
+
+    /** Một đáp án đã qua kiểm tra, sẵn sàng ghi. */
+    private record ResolvedAnswer(SaveAnswerRequest request, ExamQuestion examQuestion,
+                                  ExamQuestionAnswer selected) {
+    }
+
+    /** Bước kiểm tra của upsert: chỉ đọc, không ghi gì, ném lỗi nếu đáp án không hợp lệ. */
+    private ResolvedAnswer resolveAnswer(Integer examId, SaveAnswerRequest request,
+                                         ExamSectionTiming timing, LocalDateTime now) {
         ExamQuestion examQuestion = examQuestionRepository
                 .findByExam_ExamIdAndQuestion_QuestionId(examId, request.getQuestionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Câu hỏi id=" + request.getQuestionId()
                         + " không thuộc đề thi id=" + examId));
 
-        ExamQuestionAnswer selected = resolveSelectedOption(examId, examQuestion, request);
+        // Hết giờ một phần là KHOÁ phần đó.
+        if (timing != null && timing.hasSections()) {
+            Integer sectionId = examQuestion.getSection() == null
+                    ? null : examQuestion.getSection().getSectionId();
+            if (!timing.isOpen(sectionId, now)) {
+                throw new BusinessException(timing.closedReason(sectionId, now));
+            }
+        }
+
+        return new ResolvedAnswer(request, examQuestion,
+                resolveSelectedOption(examId, examQuestion, request));
+    }
+
+    /** Bước ghi của upsert. */
+    private SubmissionDetail writeAnswer(ExamSubmission session, ResolvedAnswer answer, LocalDateTime now) {
+        SaveAnswerRequest request = answer.request();
+        ExamQuestionAnswer selected = answer.selected();
 
         SubmissionDetail detail = detailRepository
                 .findBySubmission_SubmissionIdAndQuestion_QuestionId(
                         session.getSubmissionId(), request.getQuestionId())
                 .orElseGet(() -> SubmissionDetail.builder()
                         .submission(session)
-                        .question(examQuestion.getQuestion())
+                        .question(answer.examQuestion().getQuestion())
                         .build());
 
         detail.setSelectedSnapshotAnswer(selected);
@@ -392,11 +403,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 finishSession(session.getExam(), session, now, true);
                 justAutoSubmitted = true;
             } else {
-                // Chỉ ghi nhận "còn sống". ExpiresAt tuyệt đối không bị nới ra:
-                // heartbeat dùng để phát hiện rớt mạng, không dùng để bù giờ.
+                // Chỉ ghi nhận "còn sống". ExpiresAt tuyệt đối không bị nới ra.
                 markAlive(session, now);
-                session.setLastActiveAt(now);
-                session.setAtRiskStatus(false);
             }
         }
 
@@ -425,13 +433,23 @@ public class SubmissionServiceImpl implements SubmissionService {
         LocalDateTime now = LocalDateTime.now();
         boolean expired = session.isExpiredAt(now);
 
-        // Lưới an toàn cho các câu autosave chưa kịp gửi lên. Quá deadline thì
-        // không nhận thêm đáp án mới — chỉ chốt những gì đã lưu.
+        // Lưới an toàn cho các câu autosave chưa kịp gửi lên.
         if (!expired && request != null && request.getAnswers() != null) {
+            // Cùng luật khoá phần như autosave: câu thuộc phần đã hết giờ thì không được len vào lúc nộp bài.
+            ExamSectionTiming timing = timingOf(examId, session);
+            List<ResolvedAnswer> resolved = new ArrayList<>();
             for (SaveAnswerRequest answer : request.getAnswers()) {
-                if (answer.getQuestionId() != null) {
-                    upsertAnswer(examId, session, answer, now);
+                if (answer.getQuestionId() == null) {
+                    continue;
                 }
+                try {
+                    resolved.add(resolveAnswer(examId, answer, timing, now));
+                } catch (BusinessException e) {
+                    log.debug("Bỏ qua câu quá hạn lúc nộp bài: {}", e.getMessage());
+                }
+            }
+            for (ResolvedAnswer answer : resolved) {
+                writeAnswer(session, answer, now);
             }
         }
         return finishSession(session.getExam(), session, now, expired);
@@ -443,9 +461,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         LocalDateTime now = LocalDateTime.now();
         List<ExamSubmission> expired = submissionRepository
                 .findByStatusAndExpiresAtLessThanEqual(SubmissionStatus.IN_PROGRESS, now);
-        // Cả lô nằm trong một transaction: một bài lỗi thì lô đó không được chốt
-        // và job chạy lần sau sẽ thử lại. Chấp nhận được vì lô rất nhỏ (chỉ gồm
-        // các phiên vừa vượt deadline trong khoảng thời gian giữa hai lần quét).
+        // Cả lô nằm trong một transaction: một bài lỗi thì lô đó không được chốt và job chạy lần sau sẽ thử lại.
         for (ExamSubmission session : expired) {
             finishSession(session.getExam(), session, now, true);
         }
@@ -466,13 +482,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             return 0;
         }
 
-        // Câu truy vấn trên chỉ lọc SƠ BỘ. Vì heartbeat không còn ghi
-        // LastActiveAt xuống DB ở mọi nhịp (xem markAlive), cột đó luôn trễ tối
-        // đa một chu kỳ flush, nên một em vẫn đang thi bình thường vẫn có thể
-        // lọt vào danh sách này.
-        //
-        // Redis mới là nơi biết chính xác ai còn nhịp: key exam:alive:* hết hạn
-        // đúng sau silenceSeconds im lặng. Hỏi cả lô trong một pipeline.
+        // Câu truy vấn trên chỉ lọc SƠ BỘ.
         Optional<Set<Integer>> alive = examRedis.findAlive(
                 candidates.stream().map(ExamSubmission::getSubmissionId).toList());
 
@@ -492,46 +502,16 @@ public class SubmissionServiceImpl implements SubmissionService {
         return flagged;
     }
 
-    /**
-     * Ghi nhận thí sinh còn sống, ưu tiên ghi vào Redis thay vì DB.
-     *
-     * Nhịp heartbeat đi qua đây mỗi 15-30 giây cho từng thí sinh. Nếu mỗi nhịp
-     * đều UPDATE cột LastActiveAt thì một phòng thi 500 em là hơn 30 UPDATE mỗi
-     * giây vào đúng bảng đang chịu tải nặng nhất, chỉ để ghi một mốc thời gian.
-     *
-     * Nên: Redis nhận mọi nhịp (key exam:alive:* với TTL = ngưỡng im lặng), còn
-     * DB chỉ được ghi khi {@code touchAlive} báo đã hết một chu kỳ flush — hoặc
-     * khi Redis chết, lúc đó nó trả về true ở mọi nhịp và hành vi quay lại y như
-     * cũ. Cột LastActiveAt vì thế vẫn dùng được, chỉ trễ tối đa một chu kỳ.
-     */
+    /** Ghi nhận thí sinh còn sống, ưu tiên ghi vào Redis thay vì DB. */
     private void markAlive(ExamSubmission session, LocalDateTime now) {
         if (examRedis.touchAlive(session.getSubmissionId(), atRiskAfterSeconds)) {
             session.setLastActiveAt(now);
         }
         // Luôn hạ cờ: đây là dữ liệu người ra đề đang nhìn, không được để trễ.
-        // Gán lại đúng giá trị cũ thì Hibernate không sinh UPDATE nào.
         session.setAtRiskStatus(false);
-        List<ExamSubmission> silent = submissionRepository
-                .findByStatusAndAtRiskStatusFalseAndLastActiveAtLessThan(
-                        SubmissionStatus.IN_PROGRESS, threshold);
-        silent.forEach(session -> session.setAtRiskStatus(true));
-        if (!silent.isEmpty()) {
-            log.info("Đánh dấu AtRiskStatus cho {} phiên im lặng quá {} giây",
-                    silent.size(), silenceSeconds);
-        }
-        return silent.size();
     }
 
-    /**
-     * Chốt một phiên thi: chấm các câu trắc nghiệm theo snapshot đáp án của đề,
-     * rồi đóng phiên lại.
-     *
-     * Dùng chung cho cả ba lối vào — thí sinh bấm nộp, request bất kỳ phát hiện
-     * đã quá giờ, và job quét định kỳ — nên không có đường nào để một phiên hết
-     * giờ mà vẫn ở trạng thái IN_PROGRESS mãi.
-     *
-     * @param auto true nếu do server chốt hộ vì hết giờ
-     */
+    /** Chốt một phiên thi: chấm các câu trắc nghiệm theo snapshot đáp án của đề, rồi đóng phiên lại. */
     private ExamResultResponse finishSession(Exam exam, ExamSubmission session,
                                              LocalDateTime now, boolean auto) {
         List<ExamQuestion> examQuestions =
@@ -541,9 +521,6 @@ public class SubmissionServiceImpl implements SubmissionService {
         BigDecimal total = BigDecimal.ZERO;
         boolean awaitingManual = false;
         // Câu làm sai được gom lại để đẩy sang sổ tay câu sai sau khi chấm xong.
-        // Chỉ gom câu trắc nghiệm: câu tự luận đang mang IsCorrect = false vì
-        // CHƯA ĐƯỢC CHẤM, không phải vì thí sinh làm sai — đưa nó vào sổ tay là
-        // bắt người ta ôn lại một câu mà chính hệ thống còn chưa biết đúng hay sai.
         List<Integer> wrongQuestionIds = new ArrayList<>();
 
         for (ExamQuestion examQuestion : examQuestions) {
@@ -592,11 +569,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         // không phải hỏi Redis về những phiên đã đóng.
         examRedis.clearSession(session.getSubmissionId());
 
-        // Đẩy câu sai sang sổ tay ôn tập. Bọc try/catch vì việc này là hệ quả
-        // của việc nộp bài chứ không phải một phần của nó: sổ tay lỗi thì bài
-        // vẫn phải được chốt và thí sinh vẫn phải thấy điểm. Đây đúng là kiểu
-        // ngoại lệ hiếm hoi đáng nuốt — mất một mục trong sổ tay là phiền,
-        // mất một bài thi là hỏng.
+        // Đẩy câu sai sang sổ tay ôn tập.
         try {
             mistakeBookService.recordMistakes(session.getStudent(), wrongQuestionIds, now);
         } catch (Exception e) {
@@ -606,9 +579,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         log.info("Chốt bài submissionId={} examId={} auto={} score={} status={}",
                 session.getSubmissionId(), exam.getExamId(), auto, total, session.getStatus());
-        // Màn hình ngay sau khi nộp cũng tuân theo cờ AllowReview của đề — nếu
-        // không, tắt cờ chỉ chặn được trang xem lại, còn màn hình nộp bài vẫn lộ
-        // hết đáp án cho lượt sau.
+        // Màn hình ngay sau khi nộp cũng tuân theo cờ AllowReview của đề.
         return buildResult(exam, session, examQuestions, details,
                 Boolean.TRUE.equals(exam.getAllowReview()), true);
     }
@@ -629,20 +600,83 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new BusinessException("Bài thi chưa nộp nên chưa có kết quả");
         }
         Exam exam = session.getExam();
-        // Đáp án đúng + giải thích chỉ mở khi người ra đề cho phép. Với đề ôn tập
-        // thì đây chính là phần thí sinh học được, nên mặc định của cột là bật;
-        // đề kiểm tra thì người ra đề tắt để lượt sau không thành chép đáp án.
+        // Đáp án đúng + giải thích chỉ mở khi người ra đề cho phép.
         boolean reveal = Boolean.TRUE.equals(exam.getAllowReview());
         ExamResultResponse result = buildResult(exam, session,
                 examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId()),
                 detailsOf(session), reveal, true);
 
-        // Trang xem lại bài là chỗ thí sinh quyết định có làm lại hay không, nên
-        // trả luôn tình trạng lượt — khỏi phải gọi thêm danh sách đề.
+        // Trang xem lại bài là chỗ thí sinh quyết định có làm lại hay không, nên trả luôn tình trạng lượt.
         long used = submissionRepository.countByExam_ExamIdAndStudent_UserId(
                 exam.getExamId(), student.getUserId());
         result.setAttemptsUsed(used);
         result.setCanRetake(exam.allowsAttempt(used));
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public AudioPlayResponse recordAudioPlay(Integer examId, Integer questionId, String studentEmail) {
+        User student = requireStudent(studentEmail);
+        ExamSubmission session = requireSession(examId, student);
+        LocalDateTime now = requireActiveSession(session);
+
+        ExamQuestion examQuestion = examQuestionRepository
+                .findByExam_ExamIdAndQuestion_QuestionId(examId, questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Câu hỏi id=" + questionId
+                        + " không thuộc đề thi id=" + examId));
+        String audioUrl = examQuestion.resolveAudioUrl();
+        if (audioUrl == null) {
+            throw new BusinessException("Câu này không có file nghe");
+        }
+
+        // Phần đã hết giờ thì không nghe lại được, cùng luật với lưu đáp án.
+        ExamSectionTiming timing = timingOf(examId, session);
+        Integer sectionId = examQuestion.getSection() == null ? null : examQuestion.getSection().getSectionId();
+        if (timing.hasSections() && !timing.isOpen(sectionId, now)) {
+            throw new BusinessException(timing.closedReason(sectionId, now));
+        }
+
+        int max = examQuestion.resolveMaxAudioPlays();
+        SubmissionDetail detail = detailRepository
+                .findBySubmission_SubmissionIdAndQuestion_QuestionId(session.getSubmissionId(), questionId)
+                .orElseGet(() -> SubmissionDetail.builder()
+                        .submission(session)
+                        .question(examQuestion.getQuestion())
+                        .build());
+        int played = detail.getAudioPlays() == null ? 0 : detail.getAudioPlays();
+        if (played >= max) {
+            throw new BusinessException("Bạn đã nghe hết " + max + " lượt cho câu này. "
+                    + "Giống kỳ thi thật, phần nghe không phát lại.");
+        }
+        detail.setAudioPlays(played + 1);
+        detailRepository.save(detail);
+        markAlive(session, now);
+
+        return AudioPlayResponse.builder()
+                .questionId(questionId)
+                .audioUrl(audioUrl)
+                .plays(played + 1)
+                .maxPlays(max)
+                .remaining(max - played - 1)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExamResultResponse getPaperForReview(Integer submissionId) {
+        ExamSubmission session = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy bài làm id=" + submissionId));
+        if (session.isInProgress()) {
+            throw new BusinessException("Thí sinh chưa nộp bài này nên chưa có gì để xem");
+        }
+        Exam exam = session.getExam();
+        ExamResultResponse result = buildResult(exam, session,
+                examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId()),
+                detailsOf(session), true, true);
+        result.setAttemptsUsed(submissionRepository.countByExam_ExamIdAndStudent_UserId(
+                exam.getExamId(), session.getStudent().getUserId()));
         return result;
     }
 
@@ -662,9 +696,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                     examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId()),
                     detailsOf(session), false, false));
         }
-        // Bài mới nộp lên đầu. Một đề giờ có thể có nhiều lượt, nên trong cùng
-        // một đề còn phải sắp theo lượt giảm dần để "Lần 3" không nằm dưới "Lần 1"
-        // khi hai lượt nộp cùng lúc (dữ liệu cũ có thể thiếu SubmittedAt).
+        // Bài mới nộp lên đầu. Một đề giờ có thể có nhiều lượt.
         history.sort(Comparator
                 .comparing(ExamResultResponse::getSubmittedAt,
                         Comparator.nullsLast(Comparator.reverseOrder()))
@@ -673,56 +705,38 @@ public class SubmissionServiceImpl implements SubmissionService {
         return history;
     }
 
-    /**
-     * Gói trạng thái phiên thi cho client.
-     *
-     * Luôn kèm {@code expiresAt} + {@code serverTime} + {@code remainingSeconds}:
-     * đây là cách client tính lại thời gian còn lại mà không cần tin đồng hồ máy
-     * của thí sinh.
-     */
+    /** Gói trạng thái phiên thi cho client. */
     private ExamSessionResponse toSessionResponse(Exam exam, ExamSubmission session, boolean resumed) {
         LocalDateTime now = LocalDateTime.now();
-        // Phần đề (nội dung câu hỏi + lựa chọn) giống nhau với mọi thí sinh nên
-        // lấy từ cache Redis; phần đã làm là của riêng từng em nên luôn đọc DB.
+        // Phần đề (nội dung câu hỏi + lựa chọn) giống nhau với mọi thí sinh nên lấy từ cache Redis.
         List<ExamQuestionView> questions = loadPaper(exam.getExamId());
         Map<Integer, SubmissionDetail> details = detailsOf(session);
+        ExamSectionTiming timing = timingOf(exam.getExamId(), session);
 
         int answered = 0;
+        // Đếm riêng theo từng phần để thanh phần thi nói được "3/12 câu"
+        Map<Integer, Integer> totalBySection = new LinkedHashMap<>();
+        Map<Integer, Integer> answeredBySection = new LinkedHashMap<>();
 
         for (ExamQuestionView question : questions) {
             SubmissionDetail detail = details.get(question.getQuestionId());
-        List<ExamQuestion> examQuestions =
-                examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId());
-        Map<Integer, SubmissionDetail> details = detailsOf(session);
-
-        List<ExamQuestionView> questions = new ArrayList<>();
-        int answered = 0;
-
-        for (ExamQuestion examQuestion : examQuestions) {
-            Integer questionId = examQuestion.getId().getQuestionId();
-            SubmissionDetail detail = details.get(questionId);
             Integer selectedId = selectedIdOf(detail);
             String essay = detail == null ? null : detail.getEssayResponse();
-            if (selectedId != null || essay != null) {
+            boolean hasAnswer = selectedId != null || essay != null;
+            if (hasAnswer) {
                 answered++;
             }
-            // Ghép bài làm của em này vào bản đề vừa lấy. An toàn vì loadPaper
-            // luôn trả về một bản dựng riêng cho request (giải mã lại từ Redis
-            // hoặc dựng mới từ DB), không phải object dùng chung.
+            if (question.getSectionId() != null) {
+                totalBySection.merge(question.getSectionId(), 1, Integer::sum);
+                if (hasAnswer) {
+                    answeredBySection.merge(question.getSectionId(), 1, Integer::sum);
+                }
+            }
+            // Ghép bài làm của em này vào bản đề vừa lấy.
             question.setSelectedSnapshotAnswerId(selectedId);
             question.setEssayResponse(essay);
             question.setAnsweredAt(detail == null ? null : detail.getAnsweredAt());
-            questions.add(ExamQuestionView.builder()
-                    .questionId(questionId)
-                    .questionOrder(examQuestion.getQuestionOrder())
-                    .points(pointsOf(examQuestion))
-                    .content(examQuestion.resolveContent())
-                    .questionType(examQuestion.resolveType())
-                    .options(optionsOf(exam.getExamId(), questionId, examQuestion.resolveType()))
-                    .selectedSnapshotAnswerId(selectedId)
-                    .essayResponse(essay)
-                    .answeredAt(detail == null ? null : detail.getAnsweredAt())
-                    .build());
+            question.setAudioPlays(detail == null || detail.getAudioPlays() == null ? 0 : detail.getAudioPlays());
         }
 
         return ExamSessionResponse.builder()
@@ -741,7 +755,16 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .atRisk(Boolean.TRUE.equals(session.getAtRiskStatus()))
                 .totalQuestions(questions.size())
                 .answeredQuestions(answered)
-                .questions(questions)
+                // Xáo theo hạt giống là submissionId.
+                .questions(PaperShuffler.shuffle(questions,
+                        Boolean.TRUE.equals(exam.getShuffleQuestions()),
+                        Boolean.TRUE.equals(exam.getShuffleOptions()),
+                        session.getSubmissionId()))
+                // Rỗng với đề không chia phần — client hiểu là chạy một đồng hồ
+                // duy nhất, y như trước v1.8.0.
+                .sections(timing.hasSections()
+                        ? timing.toViews(now, totalBySection, answeredBySection)
+                        : List.of())
                 .build();
     }
 
@@ -801,9 +824,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                     .essayResponse(essayResponse)
                     .correct(detail == null ? Boolean.FALSE : detail.getIsCorrect())
                     .scoreEarned(detail == null ? BigDecimal.ZERO : detail.getScoreEarned())
-                    // Các lựa chọn hiện cả khi đề tắt xem đáp án: thí sinh vẫn
-                    // được nhìn lại bài của chính mình, chỉ không biết cái nào
-                    // đúng — đúng bằng thứ em thấy lúc đang làm bài.
+                    // Các lựa chọn hiện cả khi đề tắt xem đáp án.
                     .options(snapshot.stream()
                             .map(option -> ExamOptionView.builder()
                                     .snapshotAnswerId(option.getSnapshotAnswerId())
@@ -825,9 +846,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .examId(exam.getExamId())
                 .examTitle(exam.getTitle())
                 .attemptNumber(session.getAttemptNumber())
-                // Cờ của ĐỀ, không phải của payload này: danh sách lịch sử luôn
-                // gọi với revealAnswers=false cho nhẹ, nhưng vẫn phải nói đúng
-                // rằng bấm vào xem chi tiết thì có đáp án hay không.
+                // Cờ của ĐỀ, không phải của payload này.
                 .reviewAllowed(Boolean.TRUE.equals(exam.getAllowReview()))
                 .maxAttempts(exam.getMaxAttempts())
                 .status(session.getStatus())
@@ -841,6 +860,8 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .correctAnswers(correct)
                 .awaitingManualGrading(awaitingManual)
                 .details(includeDetails ? views : null)
+                // Trả null khi đề không chấm theo JLPT — xem JlptScoringService.
+                .jlpt(jlptScoringService.score(exam, examQuestions, details))
                 .build();
     }
 
@@ -855,40 +876,53 @@ public class SubmissionServiceImpl implements SubmissionService {
         return user;
     }
 
-    /**
-     * Thí sinh có được làm đề này không.
-     *
-     * Thay cho {@code requireEnrolled} thời còn lớp học. Luật mới có hai nhánh:
-     *
-     *   - Đề công khai: ai cũng làm được, không cần thuộc về đâu cả. Đây chính
-     *     là thứ cho phép "thí sinh tự do thi" mà mô hình lớp không làm được.
-     *   - Đề gắn phòng: phải là thành viên đang hoạt động của một phòng có chứa
-     *     đề đó, và phòng phải còn ở trạng thái cho làm bài.
-     *
-     * Ba điều kiện của nhánh sau được kiểm trong MỘT câu truy vấn
-     * ({@code canUserTakeExam}) chứ không tách rời: kiểm thiếu vế trạng thái
-     * phòng thì người bị mời ra vẫn thi được, thiếu vế ACTIVE thì người đã rời
-     * phòng cũng vậy.
-     */
-    private void requireCanTakeExam(Exam exam, User student) {
+    /** Kết quả kiểm quyền làm một đề. */
+    private record ExamGate(LocalDateTime runningRoomEnd, String notStartedReason) {
+        static final ExamGate FREE = new ExamGate(null, null);
+    }
+
+    /** Thí sinh có được làm đề này không. */
+    private ExamGate requireCanTakeExam(Exam exam, User student) {
         if (Boolean.TRUE.equals(exam.getIsPublic())) {
-            return;
+            return ExamGate.FREE;
         }
-        if (!roomExamRepository.canUserTakeExam(exam.getExamId(), student.getUserId())) {
+        List<Room> rooms = roomExamRepository.findRoomsForActiveMember(
+                exam.getExamId(), student.getUserId());
+        if (rooms.isEmpty()) {
             // Trả 404 chứ không 403: không tiết lộ đề tồn tại cho người ngoài phòng.
             throw new ResourceNotFoundException("Không tìm thấy đề thi id=" + exam.getExamId());
         }
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime runningEnd = null;
+        Room waiting = null;
+        for (Room room : rooms) {
+            Integer longest = roomExamRepository.findLongestDurationMinutes(room.getRoomId());
+            RoomPhase phase = room.phaseAt(now, longest);
+            if (phase == RoomPhase.IN_PROGRESS) {
+                LocalDateTime end = room.endAt(longest);
+                // Đề nằm ở hai phòng cùng đang thi: lấy mốc muộn hơn, cho thí
+                // sinh trọn thời gian của phòng rộng rãi hơn.
+                if (runningEnd == null || (end != null && end.isAfter(runningEnd))) {
+                    runningEnd = end;
+                }
+            } else if (phase == RoomPhase.WAITING && waiting == null) {
+                waiting = room;
+            }
+        }
+        if (runningEnd != null) {
+            return new ExamGate(runningEnd, null);
+        }
+        if (waiting != null) {
+            return new ExamGate(null, "Phòng \"" + waiting.getName() + "\" chưa bắt đầu làm bài. "
+                    + (waiting.getStartTime() != null
+                            ? "Giờ bắt đầu: " + waiting.getStartTime() + "."
+                            : "Chờ người ra đề bấm \"Bắt đầu làm bài\"."));
+        }
+        return new ExamGate(null, "Phòng thi đã hết giờ làm bài. Xem bảng xếp hạng ở trang phòng thi.");
     }
 
-    /**
-     * Phiên mà mọi thao tác trong phòng thi tác động lên: LƯỢT GẦN NHẤT.
-     *
-     * Cố tình không lọc riêng IN_PROGRESS. Lượt gần nhất vừa bị chốt (hết giờ,
-     * hoặc nộp từ tab khác) vẫn phải trả về được, để heartbeat và submit báo cho
-     * client biết "bài đã nộp rồi" thay vì 404 — đúng hành vi từ trước khi có
-     * nhiều lượt. Việc phiên còn mở hay không do {@link #requireActiveSession}
-     * và các nhánh {@code isInProgress()} ở dưới quyết định.
-     */
+    /** Phiên mà mọi thao tác trong phòng thi tác động lên: LƯỢT GẦN NHẤT. */
     private ExamSubmission requireSession(Integer examId, User student) {
         return submissionRepository
                 .findFirstByExam_ExamIdAndStudent_UserIdOrderByAttemptNumberDesc(
@@ -897,11 +931,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                         "Bạn chưa bắt đầu làm đề thi id=" + examId));
     }
 
-    /**
-     * Phiên phải đang mở mới cho ghi. Nếu đã quá deadline thì chốt bài ngay tại
-     * đây rồi báo lỗi — mọi request của thí sinh đều là một cơ hội để phát hiện
-     * hết giờ, không phải chỉ trông vào job quét.
-     */
+    /** Phiên phải đang mở mới cho ghi. */
     private LocalDateTime requireActiveSession(ExamSubmission session) {
         if (!session.isInProgress()) {
             throw new BusinessException("Bài thi này đã nộp, không thể thay đổi đáp án.");
@@ -937,22 +967,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         return answered;
     }
 
-    /**
-     * Bản đề để thí sinh làm bài: câu hỏi theo thứ tự, kèm các lựa chọn.
-     *
-     * Đây là phần đắt nhất của mỗi lần vào phòng thi — một query lấy câu hỏi
-     * cộng thêm một query lấy lựa chọn cho TỪNG câu, tức đề 40 câu là 41 query,
-     * và cả lớp vào cùng lúc thì nhân lên bằng sĩ số. Nội dung lại hoàn toàn
-     * giống nhau giữa các em (đề đã snapshot, không đổi giữa chừng), nên đây
-     * đúng là thứ để trong Redis.
-     *
-     * Trả về một bản dựng riêng cho mỗi request — hoặc giải mã lại từ JSON trong
-     * Redis, hoặc dựng mới từ DB — nên phía gọi được phép ghi bài làm của học
-     * sinh vào đó mà không đụng tới ai khác.
-     *
-     * Cache miss hay Redis chết đều đi tiếp bằng đường DB, thí sinh không thấy
-     * khác gì ngoài việc chậm hơn một chút.
-     */
+    /** Bản đề để thí sinh làm bài: câu hỏi theo thứ tự, kèm các lựa chọn. */
     private List<ExamQuestionView> loadPaper(Integer examId) {
         Optional<List<ExamQuestionView>> cached = examRedis.getPaper(examId);
         if (cached.isPresent()) {
@@ -970,6 +985,17 @@ public class SubmissionServiceImpl implements SubmissionService {
                     .content(examQuestion.resolveContent())
                     .questionType(examQuestion.resolveType())
                     .options(optionsOf(examId, questionId, examQuestion.resolveType()))
+                    .sectionId(examQuestion.getSection() == null
+                            ? null : examQuestion.getSection().getSectionId())
+                    .skill(examQuestion.resolveSkill())
+                    // Đoạn văn đi theo từng câu, nhưng client gộp lại theo
+                    // passageId nên thí sinh chỉ đọc nó một lần.
+                    .passageId(examQuestion.getPassageId())
+                    .passageTitle(examQuestion.getPassageTitle())
+                    .passageContent(examQuestion.getPassageContent())
+                    .audioUrl(examQuestion.resolveAudioUrl())
+                    .maxAudioPlays(examQuestion.resolveAudioUrl() == null
+                            ? null : examQuestion.resolveMaxAudioPlays())
                     .build());
         }
         // Ghi cache TRƯỚC khi phía gọi ghép bài làm vào: cái được cất đi phải là

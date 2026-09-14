@@ -1,5 +1,6 @@
 package com.example.demo.domain.model;
 
+import com.example.demo.domain.enums.JlptSkill;
 import com.example.demo.domain.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -13,11 +14,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-/**
- * Câu hỏi "sống" trong ngân hàng câu hỏi — người ra đề được sửa tự do.
- * Các đề thi đã phát hành không đọc bảng này mà đọc snapshot trong
- * {@link ExamQuestion} / {@link ExamQuestionAnswer}.
- */
+/** Câu hỏi "sống" trong ngân hàng câu hỏi — người ra đề được sửa tự do. */
 @Entity
 @Table(name = "Questions")
 @Getter
@@ -50,6 +47,25 @@ public class Question {
 
     @Column(name = "DifficultyLevel")
     private Integer difficultyLevel;
+
+    /** Kỹ năng JLPT của câu — quyết định câu này được cộng vào ô nào trên bảng điểm quy đổi. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "Skill", length = 20)
+    private JlptSkill skill;
+
+    /** Đoạn văn mà câu này hỏi về. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "PassageID")
+    private ReadingPassage passage;
+
+    /** File nghe của câu 聴解. Đường dẫn tương đối do máy chủ trả về khi tải file lên (xem MediaController) */
+    @Column(name = "AudioUrl", length = 255)
+    private String audioUrl;
+
+    /** Số lần được nghe. NULL = 1, đúng như kỳ thi thật. */
+    @Column(name = "MaxAudioPlays")
+    private Integer maxAudioPlays;
 
     @Column(name = "IsAIGenerated")
     @Builder.Default

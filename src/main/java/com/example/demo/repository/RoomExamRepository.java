@@ -19,28 +19,50 @@ public interface RoomExamRepository extends JpaRepository<RoomExam, RoomExamKey>
 
     long countById_RoomId(Integer roomId);
 
-    /**
-     * Đề đó có nằm trong ít nhất một phòng mà người này đang là thành viên
-     * đang hoạt động, và phòng đó còn cho làm bài không.
-     *
-     * Đây là câu truy vấn thay thế cho {@code existsById_ClassIdAndId_StudentId}
-     * cũ, và nó phải kiểm ba thứ chứ không phải một: người đó còn ACTIVE, phòng
-     * còn ở trạng thái cho làm bài, và đề thật sự thuộc phòng đó. Thiếu vế
-     * trạng thái phòng thì người bị mời ra vẫn thi được, còn thiếu vế ACTIVE
-     * thì người đã rời phòng cũng vậy.
-     */
+    /** Các phòng chứa đề này mà người đó đang là thành viên ACTIVE, bất kể pha. */
     @Query("""
-            select count(re) > 0
-            from RoomExam re
+            select r from RoomExam re
+            join re.room r
             join RoomMember m on m.id.roomId = re.id.roomId
             where re.id.examId = :examId
               and m.id.userId = :userId
               and m.status = com.example.demo.domain.enums.MemberStatus.ACTIVE
-              and re.room.status in (
-                    com.example.demo.domain.enums.RoomStatus.OPEN,
-                    com.example.demo.domain.enums.RoomStatus.RUNNING)
             """)
-    boolean canUserTakeExam(@Param("examId") Integer examId, @Param("userId") String userId);
+    List<com.example.demo.domain.model.Room> findRoomsForActiveMember(@Param("examId") Integer examId,
+                                                                      @Param("userId") String userId);
+
+    /** Thời lượng đề dài nhất của một phòng, phút. null nếu phòng chưa có đề. */
+    @Query("""
+            select max(re.exam.durationMinutes) from RoomExam re
+            where re.id.roomId = :roomId
+            """)
+    Integer findLongestDurationMinutes(@Param("roomId") Integer roomId);
+
+    /** Như trên cho cả một tập phòng: từng dòng là [roomId, phút]. */
+    @Query("""
+            select re.id.roomId, max(re.exam.durationMinutes) from RoomExam re
+            where re.id.roomId in :roomIds
+            group by re.id.roomId
+            """)
+    List<Object[]> findLongestDurationByRoomIdIn(@Param("roomIds") Collection<Integer> roomIds);
+
+    /** Đề của một phòng kèm nội dung đề, theo thứ tự hiển thị. */
+    @Query("""
+            select re from RoomExam re
+            join fetch re.exam
+            where re.id.roomId = :roomId
+            order by re.orderNo asc
+            """)
+    List<RoomExam> findWithExamByRoomId(@Param("roomId") Integer roomId);
+
+    /** Đề của một tập phòng kèm nội dung đề. */
+    @Query("""
+            select re from RoomExam re
+            join fetch re.exam
+            where re.id.roomId in :roomIds
+            order by re.orderNo asc
+            """)
+    List<RoomExam> findWithExamByRoomIdIn(@Param("roomIds") Collection<Integer> roomIds);
 
     /** Những phòng đang dùng một đề — dùng ở màn hình quản lý đề của người ra đề. */
     @Query("select re.id.roomId from RoomExam re where re.id.examId = :examId")
@@ -61,11 +83,7 @@ public interface RoomExamRepository extends JpaRepository<RoomExam, RoomExamKey>
         long getTotal();
     }
 
-    /**
-     * Ánh xạ đề → phòng cho một tập đề, dùng khi dựng danh sách đề của thí sinh.
-     *
-     * @return từng dòng là [examId, roomId]
-     */
+    /** Ánh xạ đề → phòng cho một tập đề, dùng khi dựng danh sách đề của thí sinh. */
     @Query("""
             select re.id.examId, re.id.roomId
             from RoomExam re

@@ -9,18 +9,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
-/**
- * Một bài học trong khoá — một khối lý thuyết để đọc.
- *
- * {@link #content} là MỘT khối văn bản, không phải nhiều khối ghép lại. Bản
- * thiết kế trước có sáu loại khối (text / ví dụ / audio / ảnh / danh sách từ /
- * quiz), kéo theo một trình soạn thảo khối — phần tốn công nhất của cả mảng học
- * tập, đổi lại một khoảng giá trị nhỏ. Một ô soạn thảo cho ra gần hết giá trị đó.
- *
- * {@link #deck} và {@link #exam} đều để trống được, và đó là chủ đích: bài ngữ
- * pháp thường chẳng cần thẻ nào, còn bài từ vựng thì gắn bộ thẻ để ôn lại sau
- * khi đọc. Bộ thẻ là công cụ ÔN, không phải thứ thay cho bài học.
- */
+/** Một bài học trong khoá — một khối lý thuyết để đọc. */
 @Entity
 @Table(name = "CourseLessons")
 @Getter
@@ -65,10 +54,21 @@ public class CourseLesson {
     @JoinColumn(name = "DeckID")
     private Deck deck;
 
-    /** Bài kiểm tra cuối bài. Không bắt buộc. */
+    /** Bài kiểm tra cuối chặng. Không bắt buộc. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ExamID")
     private Exam exam;
+
+    /** Điểm tối thiểu (% của điểm tối đa) ở {@link #exam} để qua chặng. */
+    @Column(name = "MinScorePercent")
+    private Integer minScorePercent;
+
+    public static final int DEFAULT_PASS_PERCENT = 60;
+
+    /** Ngưỡng qua chặng thực tế. */
+    public int passPercent() {
+        return minScorePercent == null ? DEFAULT_PASS_PERCENT : minScorePercent;
+    }
 
     @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
