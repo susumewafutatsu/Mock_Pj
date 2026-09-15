@@ -138,6 +138,7 @@ Nằm trong [`docs/`](docs/):
 |---|---|
 | [`TRINH_BAY.md`](docs/TRINH_BAY.md) | Tóm tắt để trình bày: tính năng, phản hồi đã xử lý, kịch bản demo |
 | [`PHAN_CONG.md`](docs/PHAN_CONG.md) | Phân loại chức năng và phân công cho ba thành viên |
+| [`HUONG_DAN_TRINH_BAY_B.md`](docs/HUONG_DAN_TRINH_BAY_B.md) | Học và trả lời câu hỏi code cho khối B (thi cử & phòng thi), kèm số dòng cụ thể |
 | [`revision_plan.md`](docs/revision_plan.md) | Kế hoạch sửa theo phản hồi của người hướng dẫn, kèm các bẫy đã gặp |
 | [`audit_2026-09.md`](docs/audit_2026-09.md) | Tự rà soát toàn dự án, kết quả 4 đợt sửa |
 | [`room_review_2026-09.md`](docs/room_review_2026-09.md) | Rà soát và làm lại phòng thi |

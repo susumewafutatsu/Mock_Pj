@@ -86,8 +86,6 @@ public class SubmissionServiceImpl implements SubmissionService {
     @Value("${exam.session.at-risk-after-seconds:90}")
     private long atRiskAfterSeconds;
 
-    // ── Vấn đề 1: một lượt làm — một phiên ──────────────────────────────────
-
     @Override
     @Transactional(noRollbackFor = BusinessException.class)
     public ExamSessionResponse startOrResume(Integer examId, String studentEmail) {
@@ -95,8 +93,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         Exam exam = examRepository.findById(examId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề thi id=" + examId));
         ExamGate gate = requireCanTakeExam(exam, student);
-
-        // Nhánh nhanh: lượt gần nhất còn dở thì đây là "vào lại phòng thi", không khoá gì.
+        // thí sinh làm dở
         Optional<ExamSubmission> latest = submissionRepository
                 .findFirstByExam_ExamIdAndStudent_UserIdOrderByAttemptNumberDesc(
                         examId, student.getUserId());
@@ -104,7 +101,6 @@ public class SubmissionServiceImpl implements SubmissionService {
             return resumeExisting(exam, latest.get());
         }
 
-        // Đề trong phòng: phòng chưa bắt đầu / đã hết giờ thì không mở lượt mới.
         if (gate.notStartedReason() != null) {
             throw new BusinessException(gate.notStartedReason());
         }
@@ -142,7 +138,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = computeExpiry(exam, now);
-        // Thi trong phòng: bài không được kéo dài quá giờ kết thúc của phòng.
+    
         if (gate.runningRoomEnd() != null && gate.runningRoomEnd().isBefore(expiresAt)) {
             expiresAt = gate.runningRoomEnd();
         }
@@ -372,7 +368,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     private ExamQuestionAnswer resolveSelectedOption(Integer examId, ExamQuestion examQuestion,
                                                      SaveAnswerRequest request) {
         if (request.getSnapshotAnswerId() == null) {
-            return null;    // bỏ chọn, hoặc câu tự luận
+            return null;    
         }
         if (examQuestion.resolveType() == QuestionType.ESSAY) {
             throw new BusinessException("Câu tự luận id=" + request.getQuestionId()
@@ -403,7 +399,6 @@ public class SubmissionServiceImpl implements SubmissionService {
                 finishSession(session.getExam(), session, now, true);
                 justAutoSubmitted = true;
             } else {
-                // Chỉ ghi nhận "còn sống". ExpiresAt tuyệt đối không bị nới ra.
                 markAlive(session, now);
             }
         }
@@ -419,7 +414,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .build();
     }
 
-    // ── Vấn đề 2: hết giờ là bài phải được nộp, dù client còn sống hay không ─
+    // hết giờ là bài nộp
 
     @Override
     @Transactional(noRollbackFor = BusinessException.class)
@@ -461,7 +456,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         LocalDateTime now = LocalDateTime.now();
         List<ExamSubmission> expired = submissionRepository
                 .findByStatusAndExpiresAtLessThanEqual(SubmissionStatus.IN_PROGRESS, now);
-        // Cả lô nằm trong một transaction: một bài lỗi thì lô đó không được chốt và job chạy lần sau sẽ thử lại.
+        // autosubmit
         for (ExamSubmission session : expired) {
             finishSession(session.getExam(), session, now, true);
         }
@@ -481,14 +476,11 @@ public class SubmissionServiceImpl implements SubmissionService {
         if (candidates.isEmpty()) {
             return 0;
         }
-
-        // Câu truy vấn trên chỉ lọc SƠ BỘ.
         Optional<Set<Integer>> alive = examRedis.findAlive(
                 candidates.stream().map(ExamSubmission::getSubmissionId).toList());
 
         int flagged = 0;
         for (ExamSubmission session : candidates) {
-            // Redis không trả lời -> tin cột LastActiveAt như thời chưa có Redis.
             if (alive.isPresent() && alive.get().contains(session.getSubmissionId())) {
                 continue;
             }
@@ -502,12 +494,10 @@ public class SubmissionServiceImpl implements SubmissionService {
         return flagged;
     }
 
-    /** Ghi nhận thí sinh còn sống, ưu tiên ghi vào Redis thay vì DB. */
     private void markAlive(ExamSubmission session, LocalDateTime now) {
         if (examRedis.touchAlive(session.getSubmissionId(), atRiskAfterSeconds)) {
             session.setLastActiveAt(now);
         }
-        // Luôn hạ cờ: đây là dữ liệu người ra đề đang nhìn, không được để trễ.
         session.setAtRiskStatus(false);
     }
 
@@ -520,14 +510,13 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         BigDecimal total = BigDecimal.ZERO;
         boolean awaitingManual = false;
-        // Câu làm sai được gom lại để đẩy sang sổ tay câu sai sau khi chấm xong.
+        // Câu làm sai được  lại để đẩy sang sổ tay câu sai sau khi chấm xong.
         List<Integer> wrongQuestionIds = new ArrayList<>();
 
         for (ExamQuestion examQuestion : examQuestions) {
             Integer questionId = examQuestion.getId().getQuestionId();
             SubmissionDetail detail = details.get(questionId);
             if (detail == null) {
-                // Câu bỏ trắng vẫn ghi một dòng 0 điểm để bảng kết quả đủ số câu.
                 detail = SubmissionDetail.builder()
                         .submission(session)
                         .question(examQuestion.getQuestion())
@@ -536,7 +525,6 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
 
             if (examQuestion.resolveType() == QuestionType.ESSAY) {
-                // Tự luận không tự chấm được: để 0 điểm và chờ người ra đề / AI.
                 detail.setIsCorrect(false);
                 detail.setScoreEarned(BigDecimal.ZERO);
                 if (detail.getEssayResponse() != null) {
@@ -561,12 +549,11 @@ public class SubmissionServiceImpl implements SubmissionService {
         session.setAutoSubmitted(auto);
         session.setLastActiveAt(now);
         session.setAtRiskStatus(false);
-        // Còn câu tự luận -> mới là SUBMITTED, điểm chưa phải điểm cuối.
+
         session.setStatus(awaitingManual ? SubmissionStatus.SUBMITTED : SubmissionStatus.GRADED);
         submissionRepository.save(session);
 
-        // Bài đã chốt thì nhịp sống không còn ý nghĩa: dọn ngay để job quét
-        // không phải hỏi Redis về những phiên đã đóng.
+    
         examRedis.clearSession(session.getSubmissionId());
 
         // Đẩy câu sai sang sổ tay ôn tập.
@@ -579,12 +566,9 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         log.info("Chốt bài submissionId={} examId={} auto={} score={} status={}",
                 session.getSubmissionId(), exam.getExamId(), auto, total, session.getStatus());
-        // Màn hình ngay sau khi nộp cũng tuân theo cờ AllowReview của đề.
         return buildResult(exam, session, examQuestions, details,
                 Boolean.TRUE.equals(exam.getAllowReview()), true);
     }
-
-    // ── Kết quả ─────────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
@@ -600,13 +584,12 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new BusinessException("Bài thi chưa nộp nên chưa có kết quả");
         }
         Exam exam = session.getExam();
-        // Đáp án đúng + giải thích chỉ mở khi người ra đề cho phép.
+
         boolean reveal = Boolean.TRUE.equals(exam.getAllowReview());
         ExamResultResponse result = buildResult(exam, session,
                 examQuestionRepository.findByExam_ExamIdOrderByQuestionOrderAsc(exam.getExamId()),
                 detailsOf(session), reveal, true);
 
-        // Trang xem lại bài là chỗ thí sinh quyết định có làm lại hay không, nên trả luôn tình trạng lượt.
         long used = submissionRepository.countByExam_ExamIdAndStudent_UserId(
                 exam.getExamId(), student.getUserId());
         result.setAttemptsUsed(used);
@@ -630,7 +613,6 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new BusinessException("Câu này không có file nghe");
         }
 
-        // Phần đã hết giờ thì không nghe lại được, cùng luật với lưu đáp án.
         ExamSectionTiming timing = timingOf(examId, session);
         Integer sectionId = examQuestion.getSection() == null ? null : examQuestion.getSection().getSectionId();
         if (timing.hasSections() && !timing.isOpen(sectionId, now)) {
@@ -646,8 +628,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                         .build());
         int played = detail.getAudioPlays() == null ? 0 : detail.getAudioPlays();
         if (played >= max) {
-            throw new BusinessException("Bạn đã nghe hết " + max + " lượt cho câu này. "
-                    + "Giống kỳ thi thật, phần nghe không phát lại.");
+            throw new BusinessException("Bạn đã nghe hết " + max + " lượt cho câu này.");
         }
         detail.setAudioPlays(played + 1);
         detailRepository.save(detail);
@@ -865,8 +846,6 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .build();
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
-
     private User requireStudent(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản: " + email));
@@ -901,8 +880,6 @@ public class SubmissionServiceImpl implements SubmissionService {
             RoomPhase phase = room.phaseAt(now, longest);
             if (phase == RoomPhase.IN_PROGRESS) {
                 LocalDateTime end = room.endAt(longest);
-                // Đề nằm ở hai phòng cùng đang thi: lấy mốc muộn hơn, cho thí
-                // sinh trọn thời gian của phòng rộng rãi hơn.
                 if (runningEnd == null || (end != null && end.isAfter(runningEnd))) {
                     runningEnd = end;
                 }
@@ -950,8 +927,6 @@ public class SubmissionServiceImpl implements SubmissionService {
         Map<Integer, SubmissionDetail> map = new LinkedHashMap<>();
         for (SubmissionDetail detail : detailRepository
                 .findBySubmission_SubmissionId(session.getSubmissionId())) {
-            // Dữ liệu cũ tạo trước UNIQUE(SubmissionID, QuestionID) có thể trùng
-            // câu hỏi; giữ dòng sau cùng.
             map.put(detail.getQuestion().getQuestionId(), detail);
         }
         return map;

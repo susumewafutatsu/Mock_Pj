@@ -106,6 +106,18 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     @Transactional
+    public List<QuestionResponse> createBulk(
+            Integer bankId, List<QuestionCreateRequest> requests, String teacherEmail) {
+        if (requests == null || requests.isEmpty()) {
+            throw new BusinessException("Không có câu hỏi nào để lưu");
+        }
+        return requests.stream()
+                .map(req -> create(bankId, req, teacherEmail))
+                .toList();
+    }
+
+    @Override
+    @Transactional
     public QuestionResponse update(Integer bankId, Integer questionId,
                                    QuestionUpdateRequest req, String teacherEmail) {
         requireOwnedBank(bankId, teacherEmail);
