@@ -33,6 +33,17 @@ public class TeacherQuestionController {
                 .body(ApiResponse.success("Đã thêm câu hỏi", created));
     }
 
+    /** Lưu hàng loạt câu hỏi đã duyệt sau khi import từ PDF/Word. */
+    @PostMapping("/bulk")
+    public ResponseEntity<ApiResponse<java.util.List<QuestionResponse>>> createBulk(
+            @PathVariable Integer bankId,
+            @Valid @RequestBody java.util.List<QuestionCreateRequest> requests,
+            @AuthenticationPrincipal UserDetails me) {
+        var created = questionService.createBulk(bankId, requests, me.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đã lưu " + created.size() + " câu hỏi", created));
+    }
+
     @GetMapping
     public ApiResponse<Page<QuestionResponse>> list(
             @PathVariable Integer bankId,

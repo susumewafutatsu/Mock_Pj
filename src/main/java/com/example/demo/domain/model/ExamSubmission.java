@@ -53,7 +53,6 @@ public class ExamSubmission {
     @Builder.Default
     private BigDecimal totalScore = new BigDecimal("0.00");
 
-    // VARCHAR thay vì ENUM riêng của MySQL (xem chú thích trong ExamQuestion)
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "Status", length = 20)
@@ -68,8 +67,6 @@ public class ExamSubmission {
     @Builder.Default
     private Boolean syncToGoogleClassroom = false;
 
-    // ── Phiên làm bài ──────────────────────────────────────────────────────
-
     /** Deadline của phiên thi, do server chốt một lần duy nhất lúc bắt đầu. */
     @Column(name = "ExpiresAt")
     private LocalDateTime expiresAt;
@@ -83,12 +80,10 @@ public class ExamSubmission {
     @Builder.Default
     private Boolean autoSubmitted = false;
 
-    /** Phiên còn đang làm dở (chưa nộp). */
     public boolean isInProgress() {
         return status == SubmissionStatus.IN_PROGRESS;
     }
 
-    /** Đã quá deadline chốt phía server chưa. Không có ExpiresAt thì coi như chưa. */
     public boolean isExpiredAt(LocalDateTime now) {
         return expiresAt != null && !now.isBefore(expiresAt);
     }

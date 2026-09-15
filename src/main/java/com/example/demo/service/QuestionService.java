@@ -16,6 +16,9 @@ public interface QuestionService {
 
     QuestionResponse create(Integer bankId, QuestionCreateRequest request, String teacherEmail);
 
+    /** Lưu hàng loạt câu hỏi đã được giáo viên duyệt sau khi import từ file. */
+    List<QuestionResponse> createBulk(Integer bankId, List<QuestionCreateRequest> requests, String teacherEmail);
+
     QuestionResponse update(Integer bankId, Integer questionId,
                             QuestionUpdateRequest request, String teacherEmail);
 

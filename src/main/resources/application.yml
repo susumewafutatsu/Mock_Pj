@@ -109,6 +109,14 @@ study:
     # Trần số thẻ nạp vào lịch trong một lần ghi danh bộ thẻ.
     max-enroll-per-deck: 500
 
+# ── Import câu hỏi từ PDF/Word bằng Gemini ──────────────────────
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-flash-latest}
+  base-url: https://generativelanguage.googleapis.com
+  # Số câu hỏi tối đa sinh trong một lần import, tránh lạm dụng.
+  max-questions-per-request: 20
+
 # ── Swagger UI ─────────────────────────────────────────────────
 springdoc:
   swagger-ui:
